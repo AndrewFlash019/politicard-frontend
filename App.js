@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import './App.css';
-import { fetchOfficialsByZip } from './services/api';
+
 
 // ─── LOGO COMPONENTS ──────────────────────────────────────────────────────────
 
@@ -859,8 +859,8 @@ function ZipOnboarding({ onComplete }) {
           <span className="ob-hex">⬡</span>
           <PolitiCardLogo height={36} />
         </div>
-<h1 className="onboard-headline">Bringing truth<br /><em>to light.</em></h1>
-<p className="onboard-sub">Unbiased. Ad-free. Your elected officials, their votes, and their statements — all in one place.</p>
+        <h1 className="onboard-headline">Your reps.<br /><em>Your feed.</em></h1>
+        <p className="onboard-sub">Follow every official representing your address — from City Hall to the U.S. Senate — in one civic social feed.</p>
         <form className="onboard-form" onSubmit={submit}>
           <div className="zip-row">
             <span className="zip-pin">📍</span>
@@ -2789,7 +2789,6 @@ function VoteFeedCard({ item, onPollVote, hasVoted }) {
         <div className="vfc-expanded">
           <div className="vfc-context-block vfc-matters">
             <div className="vfc-context-label">📍 Why it matters to ZIP 32164</div>
-
             <p className="vfc-context-text">{item.whyItMatters}</p>
           </div>
           <div className="vfc-context-block vfc-tradeoff">
@@ -3272,7 +3271,7 @@ function VotePollDrawer({ vote, official, onClose }) {
 
               {/* Why it matters */}
               <div className="vpd-ctx-block vpd-ctx-matters">
-                 <div className="vfc-context-label">📍 Why it matters to ZIP 32164</div>
+                <div className="vpd-ctx-label">📍 Why it matters to ZIP 32164</div>
                 <p className="vpd-ctx-text">{fullCard.whyItMatters}</p>
               </div>
 
@@ -3461,13 +3460,12 @@ function CommissionerScorecard({ officialId }) {
   );
 }
 
-function ExploreTab({ onProfile, liveOfficials = [] }) {
+function ExploreTab({ onProfile }) {
   const [showDemo, setShowDemo] = useState(false);
   const [showRole, setShowRole] = useState(false);
   const [showCommission, setShowCommission] = useState(false);
   const [expandedScorecard, setExpandedScorecard] = useState(null);
   const [collapsedLevels, setCollapsedLevels] = useState([]);
-  const [collapsedSubLevels, setCollapsedSubLevels] = useState([]);
   const [showCityRole, setShowCityRole] = useState(false);
   const [showCityOverview, setShowCityOverview] = useState(false);
   const [expandedCityScorecard, setExpandedCityScorecard] = useState(null);
@@ -3478,34 +3476,7 @@ function ExploreTab({ onProfile, liveOfficials = [] }) {
   const commissionerIds = [6, 13];
   const cityCouncilIds = [7, 15, 30, 31, 32];
   const schoolBoardIds = [16, 22, 23, 24, 25];
-const getBranch = (o) => {
- const t = (o.title || '').toLowerCase();
 
-// Judicial - must check title only, not name (avoid catching "Justice, James C.")
-if (t.includes('judge') || t.includes('court') || t === 'justice')
-  return 'Judicial';
-
-// Executive - only real executive titles
-if (t.includes('president') || t.includes('governor') ||
-    t.includes('attorney general') || t.includes('lt. governor') ||
-    t.includes('secretary of state') || t.includes('chief financial officer'))
-  return 'Executive';
-
-// Legislative - everything else
-return 'Legislative';
-};
-
-const getLevel = (o) => {
-  const l = (o.level || '').toLowerCase();
-  if (l === 'federal') return 'Federal';
-  if (l === 'state') return 'State';
-  return 'Local';
-};
-
-const toggleSubLevel = (branch, level) => {
-  const key = `${branch}-${level}`;
-  setCollapsedSubLevels(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
-};
   return (
     <div className="tab-content">
       <div className="exp-top-row">
@@ -3520,69 +3491,21 @@ const toggleSubLevel = (branch, level) => {
 
       {showDemo && <DemographicsPanel />}
 
-      {['Executive','Legislative','Judicial'].map(branch => {
-// Normalize 'Last, First' to 'First Last' for name matching
-const normalizeName = (name) => {
-  if (!name) return '';
-  const n = name.trim();
-  if (n.includes(',')) {
-    const [last, first] = n.split(',').map(s => s.trim());
-    return `${first} ${last}`.toLowerCase();
-  }
-  return n.toLowerCase();
-};
-
-// Always include executive officials - they represent everyone, not ZIP-specific
-const executiveOfficials = OFFICIALS.filter(o => getBranch(o) === 'Executive');
-
-const mergedOfficials = liveOfficials.length > 0
-  ? [
-      ...executiveOfficials,
-      ...liveOfficials
-        .filter(o => getBranch(o) !== 'Executive')
-        .map(live => {
-          const liveNorm = normalizeName(live.name);
-          const mock = OFFICIALS.find(m => normalizeName(m.name) === liveNorm);
-          return mock ? { ...live, approval: mock.approval, followers: mock.followers, bio: mock.bio, posts: mock.posts, image: live.image || mock.image } : live;
-        })
-    ]
-  : OFFICIALS;
-const group = mergedOfficials.filter(o => getBranch(o) === branch);
-        const isCollapsed = collapsedLevels.includes(branch);
-        const levelIcons = { Executive: '⚡', Legislative: '🏛️', Judicial: '⚖️' };
-        const subLevelIcons = { Federal: '🇺🇸', State: '🌴', Local: '📍' };
-        const subLevels = ['Federal', 'State', 'Local'];
+      {['Federal','State','Local'].map(level => {
+        const group = OFFICIALS.filter(o => o.level === level);
+        const isCollapsed = collapsedLevels.includes(level);
+        const levelIcons = { Federal: '🇺🇸', State: '🏛️', Local: '📍' };
         return (
-          <div key={branch} className="exp-group">
-            <button className="exp-level-header" onClick={() => setCollapsedLevels(prev => isCollapsed ? prev.filter(l=>l!==branch) : [...prev, branch])}>
-              <span className="exp-level-label">{levelIcons[branch]} {branch}</span>
+          <div key={level} className="exp-group">
+            <button className="exp-level-header" onClick={() => setCollapsedLevels(prev => isCollapsed ? prev.filter(l=>l!==level) : [...prev, level])}>
+              <span className="exp-level-label">{levelIcons[level]} {level} Level</span>
               <span className="exp-level-count">{group.length} officials</span>
               <span className="exp-level-chevron">{isCollapsed ? '▼' : '▲'}</span>
             </button>
             {isCollapsed ? null : <>
-            {subLevels.map(subLevel => {
-              const subKey = `${branch}-${subLevel}`;
-              const isSubCollapsed = collapsedSubLevels.includes(subKey);
-              const subGroup = group.filter(o => getLevel(o) === subLevel);
-              // For Local under Legislative, count board members too
-              const localBoardCount = subLevel === 'Local' && branch === 'Legislative'
-                ? commissionerIds.length + cityCouncilIds.length + schoolBoardIds.length
-                : 0;
-              const totalSubCount = subGroup.filter(o => !commissionerIds.includes(o.id) && !cityCouncilIds.includes(o.id) && !schoolBoardIds.includes(o.id)).length + localBoardCount;
-              if (totalSubCount === 0) return null;
-              return (
-                <div key={subLevel} style={{marginBottom:0}}>
-                  <button onClick={() => toggleSubLevel(branch, subLevel)} style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'7px 14px',background:'#f1f5f9',border:'none',borderTop:'1px solid #e2e8f0',borderBottom:'1px solid #e2e8f0',cursor:'pointer',textAlign:'left'}}>
-                    <span style={{fontSize:'0.68rem',fontWeight:700,color:'#64748b',letterSpacing:'0.07em',textTransform:'uppercase'}}>{subLevelIcons[subLevel]} {subLevel}</span>
-                    <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                      <span style={{background:'#e2e8f0',borderRadius:10,padding:'1px 7px',fontSize:'0.68rem',fontWeight:600,color:'#64748b'}}>{totalSubCount}</span>
-                      <span style={{color:'#94a3b8',fontSize:'0.65rem'}}>{isSubCollapsed ? '▼' : '▲'}</span>
-                    </div>
-                  </button>
-                  {isSubCollapsed ? null : <>
 
             {/* Commission panel injected under Local */}
-            {branch === 'Legislative' && subLevel === 'Local' && (
+            {level === 'Local' && (
               <div className="commission-section">
                 <div className="commission-intro-row">
                   <div className="commission-intro-text">
@@ -3632,7 +3555,7 @@ const group = mergedOfficials.filter(o => getBranch(o) === branch);
             )}
 
             {/* City Council section under Local */}
-            {branch === 'Legislative' && subLevel === 'Local' && (
+            {level === 'Local' && (
               <div className="commission-section" style={{ marginTop: '0.75rem' }}>
                 <div className="commission-intro-row">
                   <div className="commission-intro-text">
@@ -3680,7 +3603,7 @@ const group = mergedOfficials.filter(o => getBranch(o) === branch);
             )}
 
             {/* School Board section under Local */}
-            {branch === 'Legislative' && subLevel === 'Local' && (
+            {level === 'Local' && (
               <div className="commission-section" style={{ marginTop: '0.75rem' }}>
                 <div className="commission-intro-row">
                   <div className="commission-intro-text">
@@ -3735,24 +3658,20 @@ const group = mergedOfficials.filter(o => getBranch(o) === branch);
               </div>
             )}
 
-            {subGroup.filter(o => !commissionerIds.includes(o.id) && !cityCouncilIds.includes(o.id) && !schoolBoardIds.includes(o.id)).map(o => (
-              <button key={o.id || o.name} className="exp-card" onClick={() => onProfile(o)}>
+            {group.filter(o => (!commissionerIds.includes(o.id) && !cityCouncilIds.includes(o.id) && !schoolBoardIds.includes(o.id)) || level !== 'Local').map(o => (
+              <button key={o.id} className="exp-card" onClick={() => onProfile(o)}>
                 <OfficialAvatar official={o} size={44} radius={12} />
                 <div className="exp-info">
                   <div className="exp-name">{o.name} <span style={{ color: partyColor(o.party), fontSize:'0.7rem', fontWeight:800 }}>{o.party}</span></div>
                   <div className="exp-role">{o.title}</div>
                 </div>
                 <div className="exp-stats">
-                  <div className="exp-approval" style={{ color: o.approval >= 60 ? '#16a34a' : o.approval >= 50 ? '#d97706' : '#dc2626' }}>{o.approval != null ? o.approval + '% approval' : '% approval'}</div>
+                  <div className="exp-approval" style={{ color: o.approval >= 60 ? '#16a34a' : o.approval >= 50 ? '#d97706' : '#dc2626' }}>{o.approval}% approval</div>
                   <div className="exp-followers">{o.followers} followers</div>
                 </div>
                 <span className="exp-chevron">›</span>
               </button>
             ))}
-                  </>}
-                </div>
-              );
-            })}
             </>}
           </div>
         );
@@ -6017,16 +5936,6 @@ function BottomNav({ active, onChange, unreadNotifs = 0 }) {
 
 export default function App() {
   const [zip, setZip] = useState(null);
-  const [liveOfficials, setLiveOfficials] = useState([]);
-
-React.useEffect(() => {
-  if (!zip) return;
-  fetchOfficialsByZip(zip).then(result => {
-    if (result.success && result.officials.length > 0) {
-      setLiveOfficials(result.officials);
-    }
-  });
-}, [zip]);
   const [tab, setTab] = useState('feed');
   const [profile, setProfile] = useState(null);
   const [likes, setLikes] = useState([]);
@@ -6107,7 +6016,7 @@ React.useEffect(() => {
         ) : (
           <>
             {tab==='feed' && <FeedTab zip={zip} userName={userName} onProfile={openProfile} likes={likes} onLike={toggleLike} onPostRead={markPostRead} remoteOfficials={remoteOfficials} followedLocations={followedLocations} onAddLocation={() => setShowLocModal(true)} pollVotes={pollVotes} onPollVote={recordPollVote} pinnedPosts={pinnedPosts} onPin={togglePin} />}
-{tab==='explore' && <ExploreTab onProfile={openProfile} liveOfficials={liveOfficials} />}
+            {tab==='explore' && <ExploreTab onProfile={openProfile} />}
             {tab==='notifications' && <NotificationsTab onProfile={openProfile} readNotifIds={readNotifIds} onReadNotif={id => setReadNotifIds(prev => prev.includes(id) ? prev : [...prev, id])} />}
             {tab==='profile' && <MyProfileTab zip={zip} userName={userName} userPhoto={userPhoto} onPhotoChange={setUserPhoto} postsRead={readPostIds.size} likes={likes} followedLocations={followedLocations} onManageLocations={() => setShowLocModal(true)} pollVotesCount={pollVotes.length} pinnedPosts={pinnedPosts} onUnpin={(id) => setPinnedPosts(prev => prev.filter(p => p.id !== id))} />}
           </>

@@ -1,0 +1,84 @@
+const BASE_URL = 'https://politicard-backend.onrender.com';
+
+// Party color mapping
+const partyColor = (party) => {
+  if (!party) return '#6b7280';
+  const p = party.toUpperCase();
+  if (p === 'R' || p === 'REPUBLICAN') return '#dc2626';
+  if (p === 'D' || p === 'DEMOCRATIC' || p === 'DEMOCRAT') return '#1d4ed8';
+  return '#6b7280';
+};
+
+// Level label mapping
+const levelLabel = (level) => {
+  if (!level) return 'Federal';
+  const l = level.toLowerCase();
+  if (l === 'federal') return 'Federal';
+  if (l === 'state') return 'State';
+  return 'Local';
+};
+
+// Map backend official to frontend format
+const mapOfficial = (official, index) => ({
+  id: official.id || index + 9000,
+  name: official.name || 'Unknown Official',
+  title: official.office || official.title || 'Elected Official',
+  party: official.party ? official.party.charAt(0).toUpperCase() : '?',
+  level: levelLabel(official.level),
+  followers: '—',
+  approval: null,
+  typologyMatch: null,
+  bio: official.bio || `${official.name} serves as ${official.office || 'an elected official'}.`,
+  image: official.photo_url || null,
+  avatar: official.party?.toUpperCase().startsWith('R') ? '🏛️' : '🏛️',
+  color: partyColor(official.party),
+  website: official.website || null,
+  phone: official.phone || null,
+  posts: [],
+  _live: true, // flag to indicate this is real data
+});
+
+// Fetch officials by ZIP code from live backend
+export async function fetchOfficialsByZip(zip) {
+  try {
+    const response = await fetch(`${BASE_URL}/officials/${zip}`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Backend returned ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    // Backend returns { federal: [...], state: [...] } or a flat array
+    let officials = [];
+    if (Array.isArray(data)) {
+      officials = data;
+    } else {
+      if (data.federal) officials = [...officials, ...data.federal];
+      if (data.state) officials = [...officials, ...data.state];
+      if (data.local) officials = [...officials, ...data.local];
+      if (data.officials) officials = data.officials;
+    }
+
+    return {
+      success: true,
+      officials: officials.map(mapOfficial),
+    };
+  } catch (err) {
+    console.error('PolitiCard API error:', err);
+    return { success: false, error: err.message, officials: [] };
+  }
+}
+
+// Health check
+export async function checkBackendHealth() {
+  try {
+    const res = await fetch(`${BASE_URL}/docs`);
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
