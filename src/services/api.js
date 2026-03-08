@@ -73,6 +73,49 @@ export async function fetchOfficialsByZip(zip) {
   }
 }
 
+// Register new user
+export async function registerUser({ email, password, full_name, zip_code }) {
+  try {
+    const response = await fetch(`${BASE_URL}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, full_name, zip_code }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || 'Registration failed');
+    return { success: true, data };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+// Login user
+export async function loginUser({ email, password }) {
+  try {
+    const response = await fetch(`${BASE_URL}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || 'Login failed');
+    // Store token in memory
+    if (data.access_token) {
+      window._psToken = data.access_token;
+      window._psUser = data.user || { email };
+    }
+    return { success: true, data };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+// Logout
+export function logoutUser() {
+  window._psToken = null;
+  window._psUser = null;
+}
+
 // Health check
 export async function checkBackendHealth() {
   try {
