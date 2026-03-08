@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import './App.css';
 import { fetchOfficialsByZip } from './services/api';
+import Login from './Login';
 
 // ─── LOGO COMPONENTS ──────────────────────────────────────────────────────────
 
@@ -6016,8 +6017,8 @@ function BottomNav({ active, onChange, unreadNotifs = 0 }) {
 // ─── ROOT ────────────────────────────────────────────────────────────────────
 
 export default function App() {
+  const [user, setUser] = useState(null);
   const [zip, setZip] = useState(null);
-  const [liveOfficials, setLiveOfficials] = useState([]);
 
 React.useEffect(() => {
   if (!zip) return;
@@ -6062,6 +6063,7 @@ React.useEffect(() => {
   const openProfile = (o) => setProfile(o);
   const changeTab = (t) => { setTab(t); setProfile(null); };
 
+  if (!user) return <Login onAuth={(u, z) => { setUser(u); if (z) setZip(z); }} />;
   if (!zip) return <ZipOnboarding onComplete={setZip} />;
 
   const tabTitles = { feed:'PolitiCard', explore:'Explore', notifications:'Activity', profile:'My Profile' };
