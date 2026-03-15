@@ -3689,7 +3689,7 @@ const group = mergedOfficials.filter(o => getBranch(o) === branch);
             )}
 
             {/* School Board section under Local */}
-            {branch === 'Legislative' && subLevel === 'Local' && (
+            {branch === 'Legislative' && subLevel === 'Local' && isLocalDataAvailable && (
               <div className="commission-section" style={{ marginTop: '0.75rem' }}>
                 <div className="commission-intro-row">
                   <div className="commission-intro-text">
