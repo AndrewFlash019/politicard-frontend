@@ -3462,7 +3462,9 @@ function CommissionerScorecard({ officialId }) {
   );
 }
 
-function ExploreTab({ onProfile, liveOfficials = [] }) {
+function ExploreTab({ onProfile, liveOfficials = [], zip = '' }) {
+  const FLAGLER_ZIPS = ['32110','32136','32137','32164'];
+  const isLocalDataAvailable = FLAGLER_ZIPS.includes(zip);
   const [showDemo, setShowDemo] = useState(false);
   const [showRole, setShowRole] = useState(false);
   const [showCommission, setShowCommission] = useState(false);
@@ -3584,6 +3586,7 @@ const group = mergedOfficials.filter(o => getBranch(o) === branch);
 
             {/* Commission panel injected under Local */}
             {branch === 'Legislative' && subLevel === 'Local' && (
+              isLocalDataAvailable ? (
               <div className="commission-section">
                 <div className="commission-intro-row">
                   <div className="commission-intro-text">
@@ -3630,10 +3633,15 @@ const group = mergedOfficials.filter(o => getBranch(o) === branch);
                   );
                 })}
               </div>
+              ) : (
+              <div className="commission-section" style={{padding:'1rem', textAlign:'center', color:'#94a3b8'}}>
+                <p style={{margin:0}}>🔜 Local officials data coming soon for this area.</p>
+              </div>
+              )
             )}
 
             {/* City Council section under Local */}
-            {branch === 'Legislative' && subLevel === 'Local' && (
+            {branch === 'Legislative' && subLevel === 'Local' && isLocalDataAvailable && (
               <div className="commission-section" style={{ marginTop: '0.75rem' }}>
                 <div className="commission-intro-row">
                   <div className="commission-intro-text">
@@ -6110,7 +6118,7 @@ React.useEffect(() => {
         ) : (
           <>
             {tab==='feed' && <FeedTab zip={zip} userName={userName} onProfile={openProfile} likes={likes} onLike={toggleLike} onPostRead={markPostRead} remoteOfficials={remoteOfficials} followedLocations={followedLocations} onAddLocation={() => setShowLocModal(true)} pollVotes={pollVotes} onPollVote={recordPollVote} pinnedPosts={pinnedPosts} onPin={togglePin} liveOfficials={liveOfficials} />}
-{tab==='explore' && <ExploreTab onProfile={openProfile} liveOfficials={liveOfficials} />}
+{tab==='explore' && <ExploreTab onProfile={openProfile} liveOfficials={liveOfficials} zip={zip} />}
             {tab==='notifications' && <NotificationsTab onProfile={openProfile} readNotifIds={readNotifIds} onReadNotif={id => setReadNotifIds(prev => prev.includes(id) ? prev : [...prev, id])} />}
             {tab==='profile' && <MyProfileTab zip={zip} userName={userName} userPhoto={userPhoto} onPhotoChange={setUserPhoto} postsRead={readPostIds.size} likes={likes} followedLocations={followedLocations} onManageLocations={() => setShowLocModal(true)} pollVotesCount={pollVotes.length} pinnedPosts={pinnedPosts} onUnpin={(id) => setPinnedPosts(prev => prev.filter(p => p.id !== id))} />}
           </>
