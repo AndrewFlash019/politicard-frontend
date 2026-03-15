@@ -6026,7 +6026,12 @@ function BottomNav({ active, onChange, unreadNotifs = 0 }) {
 
 export default function App() {
   const [user, setUser] = useState(null);
- const [zip, setZip] = useState(null);
+ const [zip, setZipState] = useState(() => localStorage.getItem('politiscore_zip') || null);
+
+  const setZip = (z) => {
+    localStorage.setItem('politiscore_zip', z);
+    setZipState(z);
+  };
   const [liveOfficials, setLiveOfficials] = useState([]);
 
 React.useEffect(() => {
