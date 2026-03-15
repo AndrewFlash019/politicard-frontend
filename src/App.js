@@ -2841,7 +2841,7 @@ function VoteFeedCard({ item, onPollVote, hasVoted }) {
   );
 }
 
-function FeedTab({ zip, userName, onProfile, likes, onLike, onPostRead, remoteOfficials = [], followedLocations = [], onAddLocation, pollVotes = [], onPollVote, pinnedPosts = [], onPin }) {
+function FeedTab({ zip, userName, onProfile, likes, onLike, onPostRead, remoteOfficials = [], followedLocations = [], onAddLocation, pollVotes = [], onPollVote, pinnedPosts = [], onPin, liveOfficials = [] }) {
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [showFilter, setShowFilter] = useState(false);
   const [showElection, setShowElection] = useState(null);
@@ -2907,7 +2907,7 @@ function FeedTab({ zip, userName, onProfile, likes, onLike, onPostRead, remoteOf
             {followedLocations.length > 0 && followedLocations.map(l => (
               <span key={l.zip} className="feed-loc-tag"> · {l.city}, {l.state}</span>
             ))}
-            {' · '}{OFFICIALS.length + remoteOfficials.length} officials
+            {' · '}{(liveOfficials.length > 0 ? liveOfficials.length : OFFICIALS.length) + remoteOfficials.length} officials
           </p>
         </div>
         <button className={`filter-pill ${count > 0 ? 'filter-pill-active' : ''}`} onClick={() => setShowFilter(true)}>
@@ -6109,7 +6109,7 @@ React.useEffect(() => {
           <OfficialProfile official={profile} onBack={() => setProfile(null)} likes={likes} onLike={toggleLike} />
         ) : (
           <>
-            {tab==='feed' && <FeedTab zip={zip} userName={userName} onProfile={openProfile} likes={likes} onLike={toggleLike} onPostRead={markPostRead} remoteOfficials={remoteOfficials} followedLocations={followedLocations} onAddLocation={() => setShowLocModal(true)} pollVotes={pollVotes} onPollVote={recordPollVote} pinnedPosts={pinnedPosts} onPin={togglePin} />}
+            {tab==='feed' && <FeedTab zip={zip} userName={userName} onProfile={openProfile} likes={likes} onLike={toggleLike} onPostRead={markPostRead} remoteOfficials={remoteOfficials} followedLocations={followedLocations} onAddLocation={() => setShowLocModal(true)} pollVotes={pollVotes} onPollVote={recordPollVote} pinnedPosts={pinnedPosts} onPin={togglePin} liveOfficials={liveOfficials} />}
 {tab==='explore' && <ExploreTab onProfile={openProfile} liveOfficials={liveOfficials} />}
             {tab==='notifications' && <NotificationsTab onProfile={openProfile} readNotifIds={readNotifIds} onReadNotif={id => setReadNotifIds(prev => prev.includes(id) ? prev : [...prev, id])} />}
             {tab==='profile' && <MyProfileTab zip={zip} userName={userName} userPhoto={userPhoto} onPhotoChange={setUserPhoto} postsRead={readPostIds.size} likes={likes} followedLocations={followedLocations} onManageLocations={() => setShowLocModal(true)} pollVotesCount={pollVotes.length} pinnedPosts={pinnedPosts} onUnpin={(id) => setPinnedPosts(prev => prev.filter(p => p.id !== id))} />}
