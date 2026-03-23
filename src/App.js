@@ -3985,7 +3985,7 @@ function DimensionBars({ scores }) {
   );
 }
 
-function MyProfileTab({ zip, userName, userPhoto, onPhotoChange, postsRead, likes, followedLocations = [], onManageLocations, pollVotesCount = 0, pinnedPosts = [], onUnpin }) {
+function MyProfileTab({ zip, userName, userPhoto, onPhotoChange, postsRead, likes, followedLocations = [], onManageLocations, pollVotesCount = 0, pinnedPosts = [], onUnpin, onLogout }) {
   const fileRef = useRef();
   const [showQuiz, setShowQuiz] = useState(false);
   const [typology, setTypology] = useState(null);
@@ -4218,12 +4218,26 @@ function MyProfileTab({ zip, userName, userPhoto, onPhotoChange, postsRead, like
           );
         })}
       </div>
+      <button
+        onClick={onLogout}
+        style={{
+          width: '100%',
+          padding: '0.85rem',
+          marginTop: '1rem',
+          borderRadius: '0.75rem',
+          border: '1px solid rgba(220,38,38,0.3)',
+          background: 'rgba(220,38,38,0.08)',
+          color: '#dc2626',
+          fontWeight: '600',
+          fontSize: '0.95rem',
+          cursor: 'pointer',
+        }}
+      >
+        Log Out
+      </button>
     </div>
   );
 }
-
-
-// ─── VOTER RESOURCES PANEL ───────────────────────────────────────────────────
 
 function VoterResourcesPanel({ zip }) {
   const [expanded, setExpanded] = useState(null);
@@ -6059,6 +6073,12 @@ React.useEffect(() => {
   const [pinnedPosts, setPinnedPosts] = useState([]);
 
   const togglePin = (post) => setPinnedPosts(prev => prev.some(p => p.id === post.id) ? prev.filter(p => p.id !== post.id) : [post, ...prev]);
+  const handleLogout = () => {
+    localStorage.removeItem('politiscore_user');
+    localStorage.removeItem('politiscore_zip');
+    setUser(null);
+    setZipState(null);
+  };
   const userName = 'Andrew';
 
   const recordPollVote = (pollId, choice) => setPollVotes(prev => prev.some(v => v.pollId === pollId) ? prev : [...prev, { pollId, choice }]);
@@ -6129,7 +6149,7 @@ React.useEffect(() => {
             {tab==='feed' && <FeedTab zip={zip} userName={userName} onProfile={openProfile} likes={likes} onLike={toggleLike} onPostRead={markPostRead} remoteOfficials={remoteOfficials} followedLocations={followedLocations} onAddLocation={() => setShowLocModal(true)} pollVotes={pollVotes} onPollVote={recordPollVote} pinnedPosts={pinnedPosts} onPin={togglePin} liveOfficials={liveOfficials} />}
 {tab==='explore' && <ExploreTab onProfile={openProfile} liveOfficials={liveOfficials} zip={zip} />}
             {tab==='notifications' && <NotificationsTab onProfile={openProfile} readNotifIds={readNotifIds} onReadNotif={id => setReadNotifIds(prev => prev.includes(id) ? prev : [...prev, id])} />}
-            {tab==='profile' && <MyProfileTab zip={zip} userName={userName} userPhoto={userPhoto} onPhotoChange={setUserPhoto} postsRead={readPostIds.size} likes={likes} followedLocations={followedLocations} onManageLocations={() => setShowLocModal(true)} pollVotesCount={pollVotes.length} pinnedPosts={pinnedPosts} onUnpin={(id) => setPinnedPosts(prev => prev.filter(p => p.id !== id))} />}
+            {tab==='profile' && <MyProfileTab zip={zip} userName={userName} userPhoto={userPhoto} onPhotoChange={setUserPhoto} postsRead={readPostIds.size} likes={likes} followedLocations={followedLocations} onManageLocations={() => setShowLocModal(true)} pollVotesCount={pollVotes.length} pinnedPosts={pinnedPosts} onUnpin={(id) => setPinnedPosts(prev => prev.filter(p => p.id !== id))} onLogout={handleLogout} />}
           </>
         )}
       </main>
