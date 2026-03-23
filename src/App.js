@@ -568,6 +568,7 @@ const UPCOMING_RACES = [
     daysOut: 255,
     type: 'Local',
     color: '#d97706',
+    zips: ['32110', '32136', '32137', '32164'],
     importance: 'HIGH',
     importanceReason: 'This seat controls land use, zoning, and the county budget. District 4 covers Palm Coast west and Bunnell. The winner will vote on $248M in annual spending.',
     status: 'Primary: August 2026 · General: November 2026',
@@ -2916,7 +2917,7 @@ function FeedTab({ zip, userName, onProfile, likes, onLike, onPostRead, remoteOf
       </div>
 
       {/* Election banners — shown near top of feed when races are within range */}
-      {UPCOMING_RACES.map(race => (
+      {UPCOMING_RACES.filter(race => !race.zips || race.zips.includes(zip)).map(race => (
         <ElectionBanner key={race.id} race={race} onExpand={() => setShowElection(race)} />
       ))}
 
@@ -6025,7 +6026,10 @@ function BottomNav({ active, onChange, unreadNotifs = 0 }) {
 // ─── ROOT ────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    const saved = localStorage.getItem('politiscore_user');
+    return saved ? JSON.parse(saved) : null;
+  });
  const [zip, setZipState] = useState(() => localStorage.getItem('politiscore_zip') || null);
 
   const setZip = (z) => {
@@ -6077,7 +6081,7 @@ React.useEffect(() => {
   const openProfile = (o) => setProfile(o);
   const changeTab = (t) => { setTab(t); setProfile(null); };
 
-  if (!user) return <Login onAuth={(u, z) => { setUser(u); if (z) setZip(z); }} />;
+  if (!user) return <Login onAuth={(u, z) => { localStorage.setItem('politiscore_user', JSON.stringify(u)); setUser(u); if (z) setZip(z); }} />;
   if (!zip) return <ZipOnboarding onComplete={setZip} />;
 
   const tabTitles = { feed:'PolitiCard', explore:'Explore', notifications:'Activity', profile:'My Profile' };
