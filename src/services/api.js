@@ -41,9 +41,13 @@ const mapOfficial = (official, index) => ({
 // Fetch officials by ZIP code from live backend
 export async function fetchOfficialsByZip(zip) {
   try {
-    const response = await fetch(`${BASE_URL}/officials/${zip}`, {
+    const token = window._psToken || localStorage.getItem('politiscore_token') || '';
+    const response = await fetch(`${BASE_URL}/officials/zip/${zip}`, {
       method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      },
     });
 
     if (!response.ok) {
@@ -103,6 +107,7 @@ export async function loginUser({ email, password }) {
     if (data.access_token) {
       window._psToken = data.access_token;
       window._psUser = data.user || { email };
+      localStorage.setItem('politiscore_token', data.access_token);
     }
     return { success: true, data };
   } catch (err) {
@@ -114,6 +119,9 @@ export async function loginUser({ email, password }) {
 export function logoutUser() {
   window._psToken = null;
   window._psUser = null;
+  localStorage.removeItem('politiscore_user');
+  localStorage.removeItem('politiscore_zip');
+  localStorage.removeItem('politiscore_token');
 }
 
 // Health check
