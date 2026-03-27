@@ -785,6 +785,117 @@ const CITY_TO_ZIP = {
   'palm coast': '32164', 'palm coast fl': '32164', 'flagler': '32164',
 };
 
+// Florida ZIP to city/county display name
+const FL_ZIP_CITY = {
+  // Flagler
+  '32110': 'Bunnell, Flagler Co.', '32136': 'Flagler Beach, Flagler Co.', '32137': 'Palm Coast, Flagler Co.', '32164': 'Palm Coast, Flagler Co.',
+  // Hillsborough/Tampa
+  '33601': 'Tampa, Hillsborough Co.', '33602': 'Tampa, Hillsborough Co.', '33603': 'Tampa, Hillsborough Co.', '33604': 'Tampa, Hillsborough Co.',
+  '33605': 'Tampa, Hillsborough Co.', '33606': 'Tampa, Hillsborough Co.', '33607': 'Tampa, Hillsborough Co.', '33609': 'Tampa, Hillsborough Co.',
+  '33610': 'Tampa, Hillsborough Co.', '33611': 'Tampa, Hillsborough Co.', '33612': 'Tampa, Hillsborough Co.', '33613': 'Tampa, Hillsborough Co.',
+  '33614': 'Tampa, Hillsborough Co.', '33615': 'Tampa, Hillsborough Co.', '33616': 'Tampa, Hillsborough Co.', '33617': 'Tampa, Hillsborough Co.',
+  '33618': 'Tampa, Hillsborough Co.', '33619': 'Tampa, Hillsborough Co.', '33621': 'Tampa, Hillsborough Co.', '33629': 'Tampa, Hillsborough Co.',
+  '33634': 'Tampa, Hillsborough Co.', '33635': 'Tampa, Hillsborough Co.', '33637': 'Tampa, Hillsborough Co.', '33647': 'Tampa, Hillsborough Co.',
+  // Miami-Dade
+  '33101': 'Miami, Miami-Dade Co.', '33125': 'Miami, Miami-Dade Co.', '33126': 'Miami, Miami-Dade Co.', '33127': 'Miami, Miami-Dade Co.',
+  '33128': 'Miami, Miami-Dade Co.', '33129': 'Miami, Miami-Dade Co.', '33130': 'Miami, Miami-Dade Co.', '33131': 'Miami, Miami-Dade Co.',
+  '33132': 'Miami, Miami-Dade Co.', '33133': 'Miami, Miami-Dade Co.', '33134': 'Miami, Miami-Dade Co.', '33135': 'Miami, Miami-Dade Co.',
+  '33136': 'Miami, Miami-Dade Co.', '33137': 'Miami, Miami-Dade Co.', '33138': 'Miami, Miami-Dade Co.', '33139': 'Miami Beach, Miami-Dade Co.',
+  '33140': 'Miami Beach, Miami-Dade Co.', '33141': 'Miami Beach, Miami-Dade Co.', '33142': 'Miami, Miami-Dade Co.', '33143': 'Miami, Miami-Dade Co.',
+  '33144': 'Miami, Miami-Dade Co.', '33145': 'Miami, Miami-Dade Co.', '33146': 'Miami, Miami-Dade Co.', '33147': 'Miami, Miami-Dade Co.',
+  '33149': 'Key Biscayne, Miami-Dade Co.', '33150': 'Miami, Miami-Dade Co.',
+  '33155': 'Miami, Miami-Dade Co.', '33156': 'Miami, Miami-Dade Co.', '33157': 'Miami, Miami-Dade Co.', '33158': 'Miami, Miami-Dade Co.',
+  '33160': 'Miami, Miami-Dade Co.', '33161': 'Miami, Miami-Dade Co.', '33162': 'Miami, Miami-Dade Co.',
+  '33165': 'Miami, Miami-Dade Co.', '33166': 'Miami, Miami-Dade Co.', '33167': 'Miami, Miami-Dade Co.', '33168': 'Miami, Miami-Dade Co.',
+  '33169': 'Miami, Miami-Dade Co.', '33170': 'Miami, Miami-Dade Co.',
+  // Broward
+  '33301': 'Fort Lauderdale, Broward Co.', '33304': 'Fort Lauderdale, Broward Co.', '33305': 'Fort Lauderdale, Broward Co.',
+  '33306': 'Fort Lauderdale, Broward Co.', '33308': 'Fort Lauderdale, Broward Co.', '33309': 'Fort Lauderdale, Broward Co.',
+  '33310': 'Fort Lauderdale, Broward Co.', '33311': 'Fort Lauderdale, Broward Co.', '33312': 'Fort Lauderdale, Broward Co.',
+  '33313': 'Lauderhill, Broward Co.', '33314': 'Fort Lauderdale, Broward Co.', '33315': 'Fort Lauderdale, Broward Co.',
+  '33316': 'Fort Lauderdale, Broward Co.', '33317': 'Plantation, Broward Co.', '33319': 'Lauderhill, Broward Co.',
+  '33321': 'Tamarac, Broward Co.', '33322': 'Sunrise, Broward Co.', '33323': 'Sunrise, Broward Co.',
+  '33324': 'Davie, Broward Co.', '33325': 'Davie, Broward Co.', '33326': 'Weston, Broward Co.',
+  '33328': 'Davie, Broward Co.', '33334': 'Fort Lauderdale, Broward Co.',
+  // Palm Beach
+  '33401': 'West Palm Beach, Palm Beach Co.', '33403': 'West Palm Beach, Palm Beach Co.', '33404': 'West Palm Beach, Palm Beach Co.',
+  '33405': 'West Palm Beach, Palm Beach Co.', '33406': 'West Palm Beach, Palm Beach Co.', '33407': 'West Palm Beach, Palm Beach Co.',
+  '33408': 'North Palm Beach, Palm Beach Co.', '33409': 'West Palm Beach, Palm Beach Co.', '33410': 'Palm Beach Gardens, Palm Beach Co.',
+  '33411': 'West Palm Beach, Palm Beach Co.', '33412': 'West Palm Beach, Palm Beach Co.', '33413': 'West Palm Beach, Palm Beach Co.',
+  '33414': 'Wellington, Palm Beach Co.', '33415': 'West Palm Beach, Palm Beach Co.', '33417': 'West Palm Beach, Palm Beach Co.',
+  '33418': 'Palm Beach Gardens, Palm Beach Co.', '33426': 'Boynton Beach, Palm Beach Co.', '33428': 'Boca Raton, Palm Beach Co.',
+  '33431': 'Boca Raton, Palm Beach Co.', '33432': 'Boca Raton, Palm Beach Co.', '33433': 'Boca Raton, Palm Beach Co.',
+  '33434': 'Boca Raton, Palm Beach Co.', '33435': 'Boynton Beach, Palm Beach Co.', '33436': 'Boynton Beach, Palm Beach Co.',
+  '33437': 'Boynton Beach, Palm Beach Co.', '33444': 'Delray Beach, Palm Beach Co.', '33445': 'Delray Beach, Palm Beach Co.',
+  '33446': 'Delray Beach, Palm Beach Co.', '33458': 'Jupiter, Palm Beach Co.', '33460': 'Lake Worth, Palm Beach Co.',
+  '33461': 'Lake Worth, Palm Beach Co.', '33462': 'Lake Worth, Palm Beach Co.', '33463': 'Lake Worth, Palm Beach Co.',
+  '33467': 'Lake Worth, Palm Beach Co.', '33480': 'Palm Beach, Palm Beach Co.', '33483': 'Delray Beach, Palm Beach Co.',
+  '33484': 'Delray Beach, Palm Beach Co.', '33486': 'Boca Raton, Palm Beach Co.', '33487': 'Boca Raton, Palm Beach Co.',
+  '33496': 'Boca Raton, Palm Beach Co.', '33498': 'Boca Raton, Palm Beach Co.',
+  // Duval/Jacksonville
+  '32099': 'Jacksonville, Duval Co.', '32201': 'Jacksonville, Duval Co.', '32202': 'Jacksonville, Duval Co.',
+  '32204': 'Jacksonville, Duval Co.', '32205': 'Jacksonville, Duval Co.', '32206': 'Jacksonville, Duval Co.',
+  '32207': 'Jacksonville, Duval Co.', '32208': 'Jacksonville, Duval Co.', '32209': 'Jacksonville, Duval Co.',
+  '32210': 'Jacksonville, Duval Co.', '32211': 'Jacksonville, Duval Co.', '32216': 'Jacksonville, Duval Co.',
+  '32217': 'Jacksonville, Duval Co.', '32218': 'Jacksonville, Duval Co.', '32219': 'Jacksonville, Duval Co.',
+  '32220': 'Jacksonville, Duval Co.', '32221': 'Jacksonville, Duval Co.', '32222': 'Jacksonville, Duval Co.',
+  '32223': 'Jacksonville, Duval Co.', '32224': 'Jacksonville, Duval Co.', '32225': 'Jacksonville, Duval Co.',
+  '32226': 'Jacksonville, Duval Co.', '32244': 'Jacksonville, Duval Co.', '32246': 'Jacksonville, Duval Co.',
+  '32250': 'Jacksonville Beach, Duval Co.', '32254': 'Jacksonville, Duval Co.', '32256': 'Jacksonville, Duval Co.',
+  '32257': 'Jacksonville, Duval Co.', '32258': 'Jacksonville, Duval Co.', '32266': 'Neptune Beach, Duval Co.',
+  '32277': 'Jacksonville, Duval Co.',
+  // Orange/Orlando
+  '32801': 'Orlando, Orange Co.', '32803': 'Orlando, Orange Co.', '32804': 'Orlando, Orange Co.',
+  '32805': 'Orlando, Orange Co.', '32806': 'Orlando, Orange Co.', '32807': 'Orlando, Orange Co.',
+  '32808': 'Orlando, Orange Co.', '32809': 'Orlando, Orange Co.', '32810': 'Orlando, Orange Co.',
+  '32811': 'Orlando, Orange Co.', '32812': 'Orlando, Orange Co.', '32814': 'Orlando, Orange Co.',
+  '32817': 'Orlando, Orange Co.', '32818': 'Orlando, Orange Co.', '32819': 'Orlando, Orange Co.',
+  '32821': 'Orlando, Orange Co.', '32822': 'Orlando, Orange Co.', '32824': 'Orlando, Orange Co.',
+  '32825': 'Orlando, Orange Co.', '32826': 'Orlando, Orange Co.', '32827': 'Orlando, Orange Co.',
+  '32828': 'Orlando, Orange Co.', '32829': 'Orlando, Orange Co.', '32831': 'Orlando, Orange Co.',
+  '32835': 'Orlando, Orange Co.', '32836': 'Orlando, Orange Co.', '32837': 'Orlando, Orange Co.',
+  '32839': 'Orlando, Orange Co.',
+  // Pinellas
+  '33701': 'St. Petersburg, Pinellas Co.', '33702': 'St. Petersburg, Pinellas Co.', '33703': 'St. Petersburg, Pinellas Co.',
+  '33704': 'St. Petersburg, Pinellas Co.', '33705': 'St. Petersburg, Pinellas Co.', '33706': 'St. Pete Beach, Pinellas Co.',
+  '33707': 'St. Petersburg, Pinellas Co.', '33708': 'St. Petersburg, Pinellas Co.', '33709': 'St. Petersburg, Pinellas Co.',
+  '33710': 'St. Petersburg, Pinellas Co.', '33711': 'St. Petersburg, Pinellas Co.', '33712': 'St. Petersburg, Pinellas Co.',
+  '33713': 'St. Petersburg, Pinellas Co.', '33714': 'St. Petersburg, Pinellas Co.', '33715': 'St. Petersburg, Pinellas Co.',
+  '33716': 'St. Petersburg, Pinellas Co.',
+  '33755': 'Clearwater, Pinellas Co.', '33756': 'Clearwater, Pinellas Co.', '33759': 'Clearwater, Pinellas Co.',
+  '33760': 'Clearwater, Pinellas Co.', '33761': 'Clearwater, Pinellas Co.', '33762': 'Clearwater, Pinellas Co.',
+  '33763': 'Clearwater, Pinellas Co.', '33764': 'Clearwater, Pinellas Co.', '33765': 'Clearwater, Pinellas Co.',
+  '33767': 'Clearwater Beach, Pinellas Co.',
+  // Polk
+  '33801': 'Lakeland, Polk Co.', '33803': 'Lakeland, Polk Co.', '33805': 'Lakeland, Polk Co.',
+  '33809': 'Lakeland, Polk Co.', '33810': 'Lakeland, Polk Co.', '33811': 'Lakeland, Polk Co.',
+  '33812': 'Lakeland, Polk Co.', '33813': 'Lakeland, Polk Co.', '33815': 'Lakeland, Polk Co.',
+  '33823': 'Auburndale, Polk Co.', '33825': 'Avon Park, Polk Co.', '33827': 'Babson Park, Polk Co.',
+  '33830': 'Bartow, Polk Co.', '33837': 'Davenport, Polk Co.', '33838': 'Dundee, Polk Co.',
+  '33839': 'Eagle Lake, Polk Co.', '33841': 'Fort Meade, Polk Co.', '33843': 'Frostproof, Polk Co.',
+  '33844': 'Haines City, Polk Co.', '33849': 'Kathleen, Polk Co.', '33850': 'Lake Alfred, Polk Co.',
+  '33851': 'Lake Hamilton, Polk Co.', '33853': 'Lake Wales, Polk Co.', '33859': 'Lake Wales, Polk Co.',
+  '33860': 'Mulberry, Polk Co.', '33868': 'Polk City, Polk Co.', '33880': 'Winter Haven, Polk Co.',
+  '33881': 'Winter Haven, Polk Co.', '33884': 'Winter Haven, Polk Co.',
+  // Brevard
+  '32901': 'Melbourne, Brevard Co.', '32903': 'Indialantic, Brevard Co.', '32904': 'Melbourne, Brevard Co.',
+  '32905': 'Palm Bay, Brevard Co.', '32907': 'Palm Bay, Brevard Co.', '32908': 'Palm Bay, Brevard Co.',
+  '32909': 'Palm Bay, Brevard Co.', '32920': 'Cape Canaveral, Brevard Co.', '32922': 'Cocoa, Brevard Co.',
+  '32925': 'Patrick AFB, Brevard Co.', '32926': 'Cocoa, Brevard Co.', '32927': 'Cocoa, Brevard Co.',
+  '32931': 'Cocoa Beach, Brevard Co.', '32934': 'Melbourne, Brevard Co.', '32935': 'Melbourne, Brevard Co.',
+  '32937': 'Satellite Beach, Brevard Co.', '32940': 'Melbourne, Brevard Co.', '32948': 'Fellsmere, Brevard Co.',
+  '32949': 'Grant, Brevard Co.', '32950': 'Malabar, Brevard Co.', '32951': 'Melbourne Beach, Brevard Co.',
+  '32952': 'Merritt Island, Brevard Co.', '32953': 'Merritt Island, Brevard Co.', '32955': 'Rockledge, Brevard Co.',
+  '32958': 'Sebastian, Brevard Co.', '32959': 'Viera, Brevard Co.', '32976': 'Sebastian, Brevard Co.',
+  // Volusia
+  '32114': 'Daytona Beach, Volusia Co.', '32117': 'Daytona Beach, Volusia Co.', '32118': 'Daytona Beach, Volusia Co.',
+  '32119': 'Daytona Beach, Volusia Co.', '32124': 'Daytona Beach, Volusia Co.', '32127': 'Port Orange, Volusia Co.',
+  '32128': 'Port Orange, Volusia Co.', '32129': 'Port Orange, Volusia Co.', '32130': 'DeLand, Volusia Co.',
+  '32132': 'Edgewater, Volusia Co.', '32141': 'Edgewater, Volusia Co.', '32168': 'New Smyrna Beach, Volusia Co.',
+  '32169': 'New Smyrna Beach, Volusia Co.', '32174': 'Ormond Beach, Volusia Co.', '32176': 'Ormond Beach, Volusia Co.',
+  '32180': 'Pierson, Volusia Co.', '32190': 'Seville, Volusia Co.', '32198': 'DeLand, Volusia Co.',
+};
+
 function resolveLocation(query) {
   const q = query.trim().toLowerCase().replace(/,/g, '').replace(/\s+/g, ' ');
   if (/^\d{5}$/.test(q)) {
@@ -6136,7 +6247,7 @@ React.useEffect(() => {
               {followedLocations.length > 0 && <span className="tb-loc-badge">{totalLocations}</span>}
             </button>
             <button className="tb-zip" onClick={() => setShowZipModal(true)}>
-              <span>📍</span><span>{zip}</span>
+              <span>📍</span><span>{FL_ZIP_CITY[zip] || LOCATION_DB[zip]?.displayName || zip}</span>
             </button>
           </div>
         </header>
