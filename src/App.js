@@ -5893,9 +5893,11 @@ function OfficialProfile({ official: o, onBack, likes, onLike }) {
             </div>
             <div className="prof-compact-role">{o.title}</div>
             <div className="prof-compact-badges">
-              <span className="prof-compact-match" style={{ color: mc }}>
-                {o.typologyMatch}% your match
-              </span>
+              {o.typologyMatch > 0 && (
+                <span className="prof-compact-match" style={{ color: mc }}>
+                  {o.typologyMatch}% your match
+                </span>
+              )}
             </div>
           </div>
           <button className="prof-follow-compact">+ Follow</button>
@@ -5969,18 +5971,22 @@ function OfficialProfile({ official: o, onBack, likes, onLike }) {
         );
       })()}
 
-      <div className="prof-stats-row">
-        <div className="prof-stat"><span className="ps-num" style={{ color: mc }}>{o.typologyMatch}%</span><span className="ps-lbl">Your Match</span></div>
-      </div>
-
-      <div className="typology-section">
-        <div className="typo-header">
-          <span>Preference Similarity</span>
-          <span style={{ color: mc, fontWeight:600 }}>{o.typologyMatch}% match</span>
+      {o.typologyMatch > 0 && (
+        <div className="prof-stats-row">
+          <div className="prof-stat"><span className="ps-num" style={{ color: mc }}>{o.typologyMatch}%</span><span className="ps-lbl">Your Match</span></div>
         </div>
-        <div className="typo-track"><div className="typo-fill" style={{ width:`${o.typologyMatch}%`, background:mc }} /></div>
-        <div className="typo-ends"><span>Low alignment</span><span>High alignment</span></div>
-      </div>
+      )}
+
+      {o.typologyMatch > 0 && (
+        <div className="typology-section">
+          <div className="typo-header">
+            <span>Preference Similarity</span>
+            <span style={{ color: mc, fontWeight:600 }}>{o.typologyMatch}% match</span>
+          </div>
+          <div className="typo-track"><div className="typo-fill" style={{ width:`${o.typologyMatch}%`, background:mc }} /></div>
+          <div className="typo-ends"><span>Low alignment</span><span>High alignment</span></div>
+        </div>
+      )}
 
       <div className="prof-tabs">
         <button className={`prof-tab-btn ${profTab==='posts'?'prof-tab-active':''}`} onClick={() => setProfTab('posts')}>📝 Posts</button>
