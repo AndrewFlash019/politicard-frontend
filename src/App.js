@@ -3552,6 +3552,7 @@ const mergedOfficials = liveOfficials.length > 0
     ]
   : OFFICIALS;
 const group = mergedOfficials.filter(o => getBranch(o) === branch);
+        if (branch === 'Judicial' && group.length === 0) return null;
         const isCollapsed = collapsedLevels.includes(branch);
         const levelIcons = { Executive: '⚡', Legislative: '🏛️', Judicial: '⚖️' };
         const subLevelIcons = { Federal: '🇺🇸', State: '🌴', Local: '📍' };
@@ -3621,7 +3622,7 @@ const group = mergedOfficials.filter(o => getBranch(o) === branch);
                           <div className="exp-role">{o.title}</div>
                         </div>
                         <div className="exp-stats">
-                          <div className="exp-approval" style={{ color: o.approval >= 60 ? '#16a34a' : o.approval >= 50 ? '#d97706' : '#dc2626' }}>{o.approval}% approval</div>
+                          
                         </div>
                         <span className="exp-chevron">›</span>
                       </button>
@@ -3674,7 +3675,7 @@ const group = mergedOfficials.filter(o => getBranch(o) === branch);
                           <div className="exp-role">{o.title}</div>
                         </div>
                         <div className="exp-stats">
-                          <div className="exp-approval" style={{ color: o.approval >= 60 ? '#16a34a' : o.approval >= 50 ? '#d97706' : '#dc2626' }}>{o.approval}% approval</div>
+                          
                         </div>
                         <span className="exp-chevron">›</span>
                       </button>
@@ -3725,7 +3726,7 @@ const group = mergedOfficials.filter(o => getBranch(o) === branch);
                         </div>
                         {!isVacant && (
                           <div className="exp-stats">
-                            <div className="exp-approval" style={{ color: o.approval >= 60 ? '#16a34a' : o.approval >= 50 ? '#d97706' : '#dc2626' }}>{o.approval}% approval</div>
+                            
                           </div>
                         )}
                         <span className="exp-chevron">{isVacant ? '' : '›'}</span>
@@ -3753,8 +3754,6 @@ const group = mergedOfficials.filter(o => getBranch(o) === branch);
                   <div className="exp-role">{o.title}</div>
                 </div>
                 <div className="exp-stats">
-                  <div className="exp-approval" style={{ color: o.approval >= 60 ? '#16a34a' : o.approval >= 50 ? '#d97706' : '#dc2626' }}>{o.approval != null ? o.approval + '% approval' : '% approval'}</div>
-                  <div className="exp-followers">{o.followers} followers</div>
                 </div>
                 <span className="exp-chevron">›</span>
               </button>
@@ -4070,8 +4069,8 @@ function MyProfileTab({ zip, userName, userPhoto, onPhotoChange, postsRead, like
               <span className="myp-loc-card-flag">🏠</span>
               <span className="myp-loc-card-home-tag">Home</span>
             </div>
-            <div className="myp-loc-card-city">Palm Coast</div>
-            <div className="myp-loc-card-state">Florida · {zip}</div>
+            <div className="myp-loc-card-city">{LOCATION_DB[zip]?.city || 'Your City'}</div>
+            <div className="myp-loc-card-state">{LOCATION_DB[zip]?.state || 'FL'} · {zip}</div>
             <div className="myp-loc-card-count">{OFFICIALS.length} officials</div>
           </div>
 
@@ -5894,7 +5893,6 @@ function OfficialProfile({ official: o, onBack, likes, onLike }) {
             </div>
             <div className="prof-compact-role">{o.title}</div>
             <div className="prof-compact-badges">
-              <span className="prof-compact-approval">{o.approval}% approval</span>
               <span className="prof-compact-match" style={{ color: mc }}>
                 {o.typologyMatch}% your match
               </span>
@@ -5972,10 +5970,6 @@ function OfficialProfile({ official: o, onBack, likes, onLike }) {
       })()}
 
       <div className="prof-stats-row">
-        <div className="prof-stat"><span className="ps-num">{o.followers}</span><span className="ps-lbl">Followers</span></div>
-        <div className="ps-div" />
-        <div className="prof-stat"><span className="ps-num" style={{ color: o.approval >= 50 ? '#16a34a' : '#dc2626' }}>{o.approval}%</span><span className="ps-lbl">Approval</span></div>
-        <div className="ps-div" />
         <div className="prof-stat"><span className="ps-num" style={{ color: mc }}>{o.typologyMatch}%</span><span className="ps-lbl">Your Match</span></div>
       </div>
 
