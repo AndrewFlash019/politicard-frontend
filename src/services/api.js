@@ -133,3 +133,27 @@ export async function checkBackendHealth() {
     return false;
   }
 }
+
+// Fetch real feed items (legislation, votes) by ZIP
+export async function fetchFeedByZip(zip) {
+  try {
+    const token = window._psToken || localStorage.getItem('politiscore_token') || '';
+    const response = await fetch(`${BASE_URL}/feed/zip/${zip}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Backend returned ${response.status}`);
+    }
+
+    const data = await response.json();
+    return { success: true, items: data.items || [], total: data.total_count || 0 };
+  } catch (err) {
+    console.error('PolitiCard feed error:', err);
+    return { success: false, items: [], total: 0 };
+  }
+}
