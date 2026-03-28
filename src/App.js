@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import './App.css';
-import { fetchOfficialsByZip } from './services/api';
+import { fetchOfficialsByZip, fetchFeedByZip } from './services/api';
 import Login from './Login';
 
 // ─── LOGO COMPONENTS ──────────────────────────────────────────────────────────
@@ -2953,7 +2953,7 @@ function VoteFeedCard({ item, onPollVote, hasVoted }) {
   );
 }
 
-function FeedTab({ zip, userName, onProfile, likes, onLike, onPostRead, remoteOfficials = [], followedLocations = [], onAddLocation, pollVotes = [], onPollVote, pinnedPosts = [], onPin, liveOfficials = [] }) {
+function FeedTab({ zip, userName, onProfile, likes, onLike, onPostRead, remoteOfficials = [], followedLocations = [], onAddLocation, pollVotes = [], onPollVote, pinnedPosts = [], onPin, liveOfficials = [], liveFeedItems = [] }) {
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [showFilter, setShowFilter] = useState(false);
   const [showElection, setShowElection] = useState(null);
@@ -3031,6 +3031,30 @@ function FeedTab({ zip, userName, onProfile, likes, onLike, onPostRead, remoteOf
       {UPCOMING_RACES.filter(race => !race.zips || race.zips.includes(zip)).map(race => (
         <ElectionBanner key={race.id} race={race} onExpand={() => setShowElection(race)} />
       ))}
+
+      {/* Live legislative activity from real officials */}
+      {liveFeedItems.length > 0 && (
+        <div className="live-feed-section">
+          <div className="live-feed-header" style={{padding:'0.5rem 1rem', fontSize:'0.75rem', fontWeight:700, color:'#64748b', textTransform:'uppercase', letterSpacing:'0.05em'}}>
+            📋 Recent Legislative Activity
+          </div>
+          {liveFeedItems.slice(0, 10).map(item => (
+            <div key={item.id} className="live-feed-card" style={{margin:'0.5rem 1rem', padding:'0.85rem', background:'var(--card)', borderRadius:'0.75rem', border:'1px solid var(--border)'}}>
+              <div style={{display:'flex', alignItems:'flex-start', gap:'0.5rem'}}>
+                <span style={{fontSize:'1.1rem'}}>{item.item_type === 'vote' ? '🗳️' : '📜'}</span>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:'0.8rem', fontWeight:700, color:'var(--text-1)', lineHeight:1.3}}>{item.title}</div>
+                  {item.description && <div style={{fontSize:'0.75rem', color:'var(--text-2)', marginTop:'0.25rem', lineHeight:1.4}}>{item.description.length > 120 ? item.description.slice(0,120) + '…' : item.description}</div>}
+                  <div style={{display:'flex', alignItems:'center', gap:'0.5rem', marginTop:'0.4rem'}}>
+                    <span style={{fontSize:'0.7rem', color:'#94a3b8'}}>{item.official_name}</span>
+                    {item.bill_url && <a href={item.bill_url} target="_blank" rel="noopener noreferrer" style={{fontSize:'0.7rem', color:'var(--accent)', textDecoration:'none'}}>View Bill →</a>}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {filteredFeed.length === 0 ? (
         <div className="no-posts" style={{padding:'3rem 1rem'}}>No posts match your filters. <button onClick={() => setFilters(DEFAULT_FILTERS)} style={{color:'var(--accent)',fontWeight:700}}>Reset</button></div>
@@ -6186,12 +6210,18 @@ export default function App() {
     setZipState(z);
   };
   const [liveOfficials, setLiveOfficials] = useState([]);
+  const [liveFeedItems, setLiveFeedItems] = useState([]);
 
 React.useEffect(() => {
   if (!zip) return;
   fetchOfficialsByZip(zip).then(result => {
     if (result.success && result.officials.length > 0) {
       setLiveOfficials(result.officials);
+    }
+  });
+  fetchFeedByZip(zip).then(result => {
+    if (result.success && result.items.length > 0) {
+      setLiveFeedItems(result.items);
     }
   });
 }, [zip]);
@@ -6281,7 +6311,7 @@ React.useEffect(() => {
           <OfficialProfile official={profile} onBack={() => setProfile(null)} likes={likes} onLike={toggleLike} />
         ) : (
           <>
-            {tab==='feed' && <FeedTab zip={zip} userName={userName} onProfile={openProfile} likes={likes} onLike={toggleLike} onPostRead={markPostRead} remoteOfficials={remoteOfficials} followedLocations={followedLocations} onAddLocation={() => setShowLocModal(true)} pollVotes={pollVotes} onPollVote={recordPollVote} pinnedPosts={pinnedPosts} onPin={togglePin} liveOfficials={liveOfficials} />}
+            {tab==='feed' && <FeedTab zip={zip} userName={userName} onProfile={openProfile} likes={likes} onLike={toggleLike} onPostRead={markPostRead} remoteOfficials={remoteOfficials} followedLocations={followedLocations} onAddLocation={() => setShowLocModal(true)} pollVotes={pollVotes} onPollVote={recordPollVote} pinnedPosts={pinnedPosts} onPin={togglePin} liveOfficials={liveOfficials} liveFeedItems={liveFeedItems} />}
 {tab==='explore' && <ExploreTab onProfile={openProfile} liveOfficials={liveOfficials} zip={zip} />}
             {tab==='notifications' && <NotificationsTab onProfile={openProfile} readNotifIds={readNotifIds} onReadNotif={id => setReadNotifIds(prev => prev.includes(id) ? prev : [...prev, id])} />}
             {tab==='profile' && <MyProfileTab zip={zip} userName={userName} userPhoto={userPhoto} onPhotoChange={setUserPhoto} postsRead={readPostIds.size} likes={likes} followedLocations={followedLocations} onManageLocations={() => setShowLocModal(true)} pollVotesCount={pollVotes.length} pinnedPosts={pinnedPosts} onUnpin={(id) => setPinnedPosts(prev => prev.filter(p => p.id !== id))} onLogout={handleLogout} />}
