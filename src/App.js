@@ -2967,11 +2967,12 @@ function FeedTab({ zip, userName, onProfile, likes, onLike, onPostRead, remoteOf
   };
 
   const FLAGLER_ZIPS_FEED = ['32110','32136','32137','32164'];
+  const isFlaqlerZip = FLAGLER_ZIPS_FEED.includes(zip);
+
   const filteredFeed = FEED_ALL.filter(post => {
     if (!filters.levels.includes(post.official.level)) return false;
     if (!filters.types.includes(post.type)) return false;
-    // Only show hardcoded Local posts for Flagler ZIPs
-    if (post.official.level === 'Local' && !FLAGLER_ZIPS_FEED.includes(zip)) return false;
+    if (post.official.level === 'Local' && !isFlaqlerZip) return false;
     return true;
   });
 
@@ -2982,10 +2983,10 @@ function FeedTab({ zip, userName, onProfile, likes, onLike, onPostRead, remoteOf
 
   const count = activeFilterCount();
 
-  const decisionOrder = [
+  const decisionOrder = isFlaqlerZip ? [
     'City','County','State','Federal','Presidential','Supreme',
     'City','County','State','Federal',
-  ].map(lvl => DECISIONS.find(d => d.level === lvl)).filter(Boolean);
+  ].map(lvl => DECISIONS.find(d => d.level === lvl)).filter(Boolean) : [];
 
   const feedItems = [];
   let dIdx = 0, nIdx = 0, vIdx = 0, rIdx = 0;
@@ -2996,10 +2997,10 @@ function FeedTab({ zip, userName, onProfile, likes, onLike, onPostRead, remoteOf
     if ((i + 1) % 5 === 0 && rIdx < remotePosts.length) {
       feedItems.push({ kind:'remote', data:remotePosts[rIdx++] });
     }
-    if ((i + 1) % 2 === 0 && vIdx < VOTE_FEED_CARDS.length) {
+    if (isFlaqlerZip && (i + 1) % 2 === 0 && vIdx < VOTE_FEED_CARDS.length) {
       feedItems.push({ kind:'vote', data:VOTE_FEED_CARDS[vIdx++] });
     }
-    if ((i + 1) % 4 === 0 && dIdx < decisionOrder.length) {
+    if (isFlaqlerZip && (i + 1) % 4 === 0 && dIdx < decisionOrder.length) {
       feedItems.push({ kind:'decision', data:decisionOrder[dIdx++] });
     }
     if ((i + 1) % 6 === 0 && nIdx < LOCAL_NEWS.length) {
@@ -3702,6 +3703,9 @@ const normalizeName = (name) => {
 // Always include executive officials - they represent everyone, not ZIP-specific
 const executiveOfficials = OFFICIALS.filter(o => getBranch(o) === 'Executive');
 
+const FLAGLER_ZIPS_EXPLORE = ['32110','32136','32137','32164'];
+const isFlaqlerZipExplore = FLAGLER_ZIPS_EXPLORE.includes(zip);
+
 const mergedOfficials = liveOfficials.length > 0
   ? [
       ...executiveOfficials,
@@ -3713,7 +3717,7 @@ const mergedOfficials = liveOfficials.length > 0
           return mock ? { ...live, approval: mock.approval, followers: mock.followers, bio: mock.bio, posts: mock.posts, image: live.image || mock.image } : live;
         })
     ]
-  : OFFICIALS;
+  : OFFICIALS.filter(o => getBranch(o) === 'Executive' || isFlaqlerZipExplore || o.level !== 'Local');
 const group = mergedOfficials.filter(o => getBranch(o) === branch);
         if (branch === 'Judicial' && group.length === 0) return null;
         const isCollapsed = collapsedLevels.includes(branch);
@@ -3752,6 +3756,7 @@ const group = mergedOfficials.filter(o => getBranch(o) === branch);
             {/* Commission panel injected under Local */}
             {branch === 'Legislative' && subLevel === 'Local' && (
               isLocalDataAvailable ? (
+              isFlaqlerZipExplore ? (
               <div className="commission-section">
                 <div className="commission-intro-row">
                   <div className="commission-intro-text">
@@ -3798,6 +3803,7 @@ const group = mergedOfficials.filter(o => getBranch(o) === branch);
                   );
                 })}
               </div>
+              ) : null
               ) : (
               <div className="commission-section" style={{padding:'1rem', textAlign:'center', color:'#94a3b8'}}>
                 <p style={{margin:0}}>🔜 Local officials data coming soon for this area.</p>
@@ -3806,7 +3812,7 @@ const group = mergedOfficials.filter(o => getBranch(o) === branch);
             )}
 
             {/* City Council section under Local */}
-            {branch === 'Legislative' && subLevel === 'Local' && isLocalDataAvailable && (
+            {branch === 'Legislative' && subLevel === 'Local' && isLocalDataAvailable && isFlaqlerZipExplore && (
               <div className="commission-section" style={{ marginTop: '0.75rem' }}>
                 <div className="commission-intro-row">
                   <div className="commission-intro-text">
@@ -3854,7 +3860,7 @@ const group = mergedOfficials.filter(o => getBranch(o) === branch);
             )}
 
             {/* School Board section under Local */}
-            {branch === 'Legislative' && subLevel === 'Local' && isLocalDataAvailable && (
+            {branch === 'Legislative' && subLevel === 'Local' && isLocalDataAvailable && isFlaqlerZipExplore && (
               <div className="commission-section" style={{ marginTop: '0.75rem' }}>
                 <div className="commission-intro-row">
                   <div className="commission-intro-text">
