@@ -809,7 +809,7 @@ const FL_ZIP_CITY = {
   '33165': 'Miami, Miami-Dade Co.', '33166': 'Miami, Miami-Dade Co.', '33167': 'Miami, Miami-Dade Co.', '33168': 'Miami, Miami-Dade Co.',
   '33169': 'Miami, Miami-Dade Co.', '33170': 'Miami, Miami-Dade Co.',
   // Broward
-  '33301': 'Fort Lauderdale, Broward Co.', '33304': 'Fort Lauderdale, Broward Co.', '33305': 'Fort Lauderdale, Broward Co.',
+  '33301': 'Fort Lauderdale, Broward Co.', '33302': 'Fort Lauderdale, Broward Co.', '33304': 'Fort Lauderdale, Broward Co.', '33305': 'Fort Lauderdale, Broward Co.',
   '33306': 'Fort Lauderdale, Broward Co.', '33308': 'Fort Lauderdale, Broward Co.', '33309': 'Fort Lauderdale, Broward Co.',
   '33310': 'Fort Lauderdale, Broward Co.', '33311': 'Fort Lauderdale, Broward Co.', '33312': 'Fort Lauderdale, Broward Co.',
   '33313': 'Lauderhill, Broward Co.', '33314': 'Fort Lauderdale, Broward Co.', '33315': 'Fort Lauderdale, Broward Co.',
@@ -2969,10 +2969,25 @@ function FeedTab({ zip, userName, onProfile, likes, onLike, onPostRead, remoteOf
   const FLAGLER_ZIPS_FEED = ['32110','32136','32137','32164'];
   const isFlaqlerZip = FLAGLER_ZIPS_FEED.includes(zip);
 
+  // Officials who represent ALL Florida ZIPs (statewide/national)
+  const STATEWIDE_IDS = new Set([20, 21, 1, 2, 4]); // Trump, JD Vance, Moody, Scott, DeSantis
+
+  // Build set of live official names for matching
+  const liveOfficialNames = new Set(liveOfficials.map(o => o.name.toLowerCase()));
+
   const filteredFeed = FEED_ALL.filter(post => {
     if (!filters.levels.includes(post.official.level)) return false;
     if (!filters.types.includes(post.type)) return false;
+    // Statewide/national officials always show
+    if (STATEWIDE_IDS.has(post.official.id)) return true;
+    // If we have live officials for this ZIP, only show hardcoded posts
+    // from officials who actually serve this ZIP (name match)
+    if (liveOfficials.length > 0) {
+      return liveOfficialNames.has(post.official.name.toLowerCase());
+    }
+    // Fallback when no live data: show all for Flagler, filter Local for others
     if (post.official.level === 'Local' && !isFlaqlerZip) return false;
+    if (post.official.level === 'State' && post.official.title && !post.official.title.includes('Governor') && !isFlaqlerZip) return false;
     return true;
   });
 
@@ -3003,7 +3018,7 @@ function FeedTab({ zip, userName, onProfile, likes, onLike, onPostRead, remoteOf
     if (isFlaqlerZip && (i + 1) % 4 === 0 && dIdx < decisionOrder.length) {
       feedItems.push({ kind:'decision', data:decisionOrder[dIdx++] });
     }
-    if ((i + 1) % 6 === 0 && nIdx < LOCAL_NEWS.length) {
+    if (isFlaqlerZip && (i + 1) % 6 === 0 && nIdx < LOCAL_NEWS.length) {
       feedItems.push({ kind:'news', data:LOCAL_NEWS[nIdx++] });
     }
   });
@@ -3020,7 +3035,7 @@ function FeedTab({ zip, userName, onProfile, likes, onLike, onPostRead, remoteOf
         <div>
           <h2 className="feed-heading">{userName ? `${userName}'s Feed` : 'Your Feed'}</h2>
           <p className="feed-subhead">
-            📍 {zip}
+            📍 {zip}{FL_ZIP_CITY[zip] ? ` · ${FL_ZIP_CITY[zip]}` : ''}
             {followedLocations.length > 0 && followedLocations.map(l => (
               <span key={l.zip} className="feed-loc-tag"> · {l.city}, {l.state}</span>
             ))}
@@ -3613,7 +3628,7 @@ function ExploreTab({ onProfile, liveOfficials = [], zip = '' }) {
     // Miami-Dade
     '33101','33125','33126','33127','33128','33129','33130','33131','33132','33133','33134','33135','33136','33137','33138','33139','33140','33141','33142','33143','33144','33145','33146','33147','33149','33150','33155','33156','33157','33158','33160','33161','33162','33165','33166','33167','33168','33169','33170',
     // Broward
-    '33301','33304','33305','33306','33308','33309','33310','33311','33312','33313','33314','33315','33316','33317','33319','33321','33322','33323','33324','33325','33326','33328','33334',
+    '33301','33302','33304','33305','33306','33308','33309','33310','33311','33312','33313','33314','33315','33316','33317','33319','33321','33322','33323','33324','33325','33326','33328','33334',
     // Palm Beach
     '33401','33403','33404','33405','33406','33407','33408','33409','33410','33411','33412','33413','33414','33415','33417','33418','33426','33428','33431','33432','33433','33434','33435','33436','33437','33444','33445','33446','33458','33460','33461','33462','33463','33467','33480','33483','33484','33486','33487','33496','33498',
     // Duval/Jacksonville
@@ -3915,18 +3930,25 @@ const group = mergedOfficials.filter(o => getBranch(o) === branch);
               </div>
             )}
 
-            {subGroup.filter(o => !commissionerIds.includes(o.id) && !cityCouncilIds.includes(o.id) && !schoolBoardIds.includes(o.id)).map(o => (
+            {subGroup.filter(o => !commissionerIds.includes(o.id) && !cityCouncilIds.includes(o.id) && !schoolBoardIds.includes(o.id)).map(o => {
+              // Extract county from ZIP lookup for state-level officials
+              const zipCity = FL_ZIP_CITY[zip] || '';
+              const countyMatch = zipCity.match(/,\s*(.+)$/);
+              const countyLabel = countyMatch ? countyMatch[1] : '';
+              const showCounty = getLevel(o) === 'State' && !(o.title || '').toLowerCase().includes('governor') && countyLabel;
+              return (
               <button key={o.id || o.name} className="exp-card" onClick={() => onProfile(o)}>
                 <OfficialAvatar official={o} size={44} radius={12} />
                 <div className="exp-info">
                   <div className="exp-name">{o.name} <span style={{ color: partyColor(o.party), fontSize:'0.7rem', fontWeight:800 }}>{o.party}</span></div>
-                  <div className="exp-role">{o.title}</div>
+                  <div className="exp-role">{o.title}{showCounty ? ` · ${countyLabel}` : ''}</div>
                 </div>
                 <div className="exp-stats">
                 </div>
                 <span className="exp-chevron">›</span>
               </button>
-            ))}
+              );
+            })}
                   </>}
                 </div>
               );
@@ -6311,7 +6333,13 @@ React.useEffect(() => {
               {followedLocations.length > 0 && <span className="tb-loc-badge">{totalLocations}</span>}
             </button>
             <button className="tb-zip" onClick={() => setShowZipModal(true)}>
-              <span>📍</span><span>{FL_ZIP_CITY[zip] || LOCATION_DB[zip]?.displayName || zip}</span>
+              <span>📍</span>
+              <span style={{display:'flex',flexDirection:'column',alignItems:'flex-start',lineHeight:1.2}}>
+                <span>{zip}</span>
+                {(FL_ZIP_CITY[zip] || LOCATION_DB[zip]?.displayName) && (
+                  <span style={{fontSize:'0.55rem',color:'#94a3b8',fontWeight:400}}>{FL_ZIP_CITY[zip] || LOCATION_DB[zip]?.displayName}</span>
+                )}
+              </span>
             </button>
           </div>
         </header>
