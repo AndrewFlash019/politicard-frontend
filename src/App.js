@@ -2966,10 +2966,14 @@ function FeedTab({ zip, userName, onProfile, likes, onLike, onPostRead, remoteOf
     return n;
   };
 
-  const filteredFeed = FEED_ALL.filter(post =>
-    filters.levels.includes(post.official.level) &&
-    filters.types.includes(post.type)
-  );
+  const FLAGLER_ZIPS_FEED = ['32110','32136','32137','32164'];
+  const filteredFeed = FEED_ALL.filter(post => {
+    if (!filters.levels.includes(post.official.level)) return false;
+    if (!filters.types.includes(post.type)) return false;
+    // Only show hardcoded Local posts for Flagler ZIPs
+    if (post.official.level === 'Local' && !FLAGLER_ZIPS_FEED.includes(zip)) return false;
+    return true;
+  });
 
   // Build remote posts from followed locations
   const remotePosts = remoteOfficials.flatMap(official =>
