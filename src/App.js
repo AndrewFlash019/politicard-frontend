@@ -3732,7 +3732,7 @@ const mergedOfficials = liveOfficials.length > 0
           return mock ? { ...live, approval: mock.approval, followers: mock.followers, bio: mock.bio, posts: mock.posts, image: live.image || mock.image } : live;
         })
     ]
-  : OFFICIALS.filter(o => getBranch(o) === 'Executive' || isFlaqlerZipExplore || o.level !== 'Local');
+  : OFFICIALS.filter(o => getBranch(o) === 'Executive' || isFlaqlerZipExplore || o.level === 'Federal');
 const group = mergedOfficials.filter(o => getBranch(o) === branch);
         if (branch === 'Judicial' && group.length === 0) return null;
         const isCollapsed = collapsedLevels.includes(branch);
