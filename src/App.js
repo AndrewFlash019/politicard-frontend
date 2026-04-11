@@ -2953,6 +2953,34 @@ function VoteFeedCard({ item, onPollVote, hasVoted }) {
   );
 }
 
+function LiveFeedCard({ item }) {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = item.description && item.description.length > 120;
+  const shown = !item.description ? '' : (expanded || !isLong ? item.description : item.description.slice(0, 120) + '…');
+  return (
+    <div className="live-feed-card" style={{margin:'0.5rem 1rem', padding:'0.85rem', background:'var(--card)', borderRadius:'0.75rem', border:'1px solid var(--border)'}}>
+      <div style={{display:'flex', alignItems:'flex-start', gap:'0.5rem'}}>
+        <span style={{fontSize:'1.1rem'}}>{item.item_type === 'vote' ? '🗳️' : '📜'}</span>
+        <div style={{flex:1}}>
+          <div style={{fontSize:'0.8rem', fontWeight:700, color:'var(--text-1)', lineHeight:1.3}}>{item.title}</div>
+          {item.description && (
+            <div
+              onClick={() => isLong && setExpanded(e => !e)}
+              style={{fontSize:'0.75rem', color:'var(--text-2)', marginTop:'0.25rem', lineHeight:1.4, cursor: isLong ? 'pointer' : 'default'}}
+            >
+              {shown}
+            </div>
+          )}
+          <div style={{display:'flex', alignItems:'center', gap:'0.5rem', marginTop:'0.4rem'}}>
+            <span style={{fontSize:'0.7rem', color:'#94a3b8'}}>{item.official_name}</span>
+            {item.bill_url && <a href={item.bill_url} target="_blank" rel="noopener noreferrer" style={{fontSize:'0.7rem', color:'var(--accent)', textDecoration:'none'}}>View Bill →</a>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FeedTab({ zip, userName, onProfile, likes, onLike, onPostRead, remoteOfficials = [], followedLocations = [], onAddLocation, pollVotes = [], onPollVote, pinnedPosts = [], onPin, liveOfficials = [], liveFeedItems = [] }) {
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [showFilter, setShowFilter] = useState(false);
@@ -3059,19 +3087,7 @@ function FeedTab({ zip, userName, onProfile, likes, onLike, onPostRead, remoteOf
             📋 Recent Legislative Activity
           </div>
           {liveFeedItems.slice(0, 10).map(item => (
-            <div key={item.id} className="live-feed-card" style={{margin:'0.5rem 1rem', padding:'0.85rem', background:'var(--card)', borderRadius:'0.75rem', border:'1px solid var(--border)'}}>
-              <div style={{display:'flex', alignItems:'flex-start', gap:'0.5rem'}}>
-                <span style={{fontSize:'1.1rem'}}>{item.item_type === 'vote' ? '🗳️' : '📜'}</span>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:'0.8rem', fontWeight:700, color:'var(--text-1)', lineHeight:1.3}}>{item.title}</div>
-                  {item.description && <div style={{fontSize:'0.75rem', color:'var(--text-2)', marginTop:'0.25rem', lineHeight:1.4}}>{item.description.length > 120 ? item.description.slice(0,120) + '…' : item.description}</div>}
-                  <div style={{display:'flex', alignItems:'center', gap:'0.5rem', marginTop:'0.4rem'}}>
-                    <span style={{fontSize:'0.7rem', color:'#94a3b8'}}>{item.official_name}</span>
-                    {item.bill_url && <a href={item.bill_url} target="_blank" rel="noopener noreferrer" style={{fontSize:'0.7rem', color:'var(--accent)', textDecoration:'none'}}>View Bill →</a>}
-                  </div>
-                </div>
-              </div>
-            </div>
+            <LiveFeedCard key={item.id} item={item} />
           ))}
         </div>
       )}
