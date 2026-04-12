@@ -32,8 +32,10 @@ const mapOfficial = (official, index) => ({
   image: official.photo_url || null,
   avatar: official.party?.toUpperCase().startsWith('R') ? '🏛️' : '🏛️',
   color: partyColor(official.party),
+  district: official.district || null,
   website: official.website || null,
   phone: official.phone || null,
+  email: official.email || null,
   posts: [],
   _live: true, // flag to indicate this is real data
 });

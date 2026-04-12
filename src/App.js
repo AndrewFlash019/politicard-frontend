@@ -6080,11 +6080,34 @@ function ContributorsTab({ official }) {
   );
 }
 
-function OfficialProfile({ official: o, onBack, likes, onLike }) {
+function OfficialProfile({ official: o, onBack, likes, onLike, zip }) {
   const [profTab, setProfTab] = useState('posts');
+  const [legActivity, setLegActivity] = useState([]);
+  const [legLoading, setLegLoading] = useState(false);
   const posts = FEED_ALL.filter(p => p.official.id === o.id);
   const mc = o.typologyMatch >= 65 ? '#16a34a' : o.typologyMatch >= 45 ? '#d97706' : '#dc2626';
   const hasBudget = !!BUDGETS[o.id];
+
+  React.useEffect(() => {
+    if (!zip) return;
+    setLegLoading(true);
+    const token = window._psToken || localStorage.getItem('politiscore_token') || '';
+    fetch(`https://politicard-backend.onrender.com/feed/zip/${zip}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      },
+    })
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(data => {
+        const items = (data.items || []).filter(
+          it => it.official_name && it.official_name.toLowerCase() === o.name.toLowerCase()
+        );
+        setLegActivity(items);
+      })
+      .catch(() => setLegActivity([]))
+      .finally(() => setLegLoading(false));
+  }, [zip, o.name]);
 
   return (
     <div className="profile-page">
@@ -6099,6 +6122,7 @@ function OfficialProfile({ official: o, onBack, likes, onLike }) {
               <span className="prof-compact-party" style={{ color: partyColor(o.party) }}> {o.party}</span>
             </div>
             <div className="prof-compact-role">{o.title}</div>
+            {o.district && <div style={{fontSize:'0.7rem', color:'var(--text-2)'}}>{o.district}</div>}
             <div className="prof-compact-badges">
               {o.typologyMatch > 0 && (
                 <span className="prof-compact-match" style={{ color: mc }}>
@@ -6111,7 +6135,16 @@ function OfficialProfile({ official: o, onBack, likes, onLike }) {
         </div>
       </div>
 
-      <p className="prof-bio">{o.bio}</p>
+      {o.bio && <p className="prof-bio">{o.bio}</p>}
+
+      {/* Contact info */}
+      {(o.website || o.phone || o.email) && (
+        <div style={{padding:'0 1rem 0.5rem', display:'flex', flexWrap:'wrap', gap:'0.5rem'}}>
+          {o.website && <a href={o.website} target="_blank" rel="noopener noreferrer" style={{fontSize:'0.75rem', color:'var(--accent)', textDecoration:'none', display:'inline-flex', alignItems:'center', gap:'0.25rem', background:'var(--card)', padding:'0.3rem 0.6rem', borderRadius:'0.5rem', border:'1px solid var(--border)'}}>🌐 Website</a>}
+          {o.phone && <a href={`tel:${o.phone}`} style={{fontSize:'0.75rem', color:'var(--accent)', textDecoration:'none', display:'inline-flex', alignItems:'center', gap:'0.25rem', background:'var(--card)', padding:'0.3rem 0.6rem', borderRadius:'0.5rem', border:'1px solid var(--border)'}}>📞 {o.phone}</a>}
+          {o.email && <a href={`mailto:${o.email}`} style={{fontSize:'0.75rem', color:'var(--accent)', textDecoration:'none', display:'inline-flex', alignItems:'center', gap:'0.25rem', background:'var(--card)', padding:'0.3rem 0.6rem', borderRadius:'0.5rem', border:'1px solid var(--border)'}}>✉️ {o.email}</a>}
+        </div>
+      )}
 
       {/* Inline donor snapshot — always visible in bio area */}
       {CONTRIBUTORS[o.id] && (() => {
@@ -6197,6 +6230,7 @@ function OfficialProfile({ official: o, onBack, likes, onLike }) {
 
       <div className="prof-tabs">
         <button className={`prof-tab-btn ${profTab==='posts'?'prof-tab-active':''}`} onClick={() => setProfTab('posts')}>📝 Posts</button>
+        <button className={`prof-tab-btn ${profTab==='activity'?'prof-tab-active':''}`} onClick={() => setProfTab('activity')}>📋 Activity</button>
         {hasBudget && <button className={`prof-tab-btn ${profTab==='budget'?'prof-tab-active':''}`} onClick={() => setProfTab('budget')}>💰 Budget</button>}
         {o.sheriffMetrics && <button className={`prof-tab-btn ${profTab==='sheriff'?'prof-tab-active':''}`} onClick={() => setProfTab('sheriff')}>🚔 Metrics</button>}
         {CITY_COUNCIL_DATA.members[o.id] && <button className={`prof-tab-btn ${profTab==='council'?'prof-tab-active':''}`} onClick={() => setProfTab('council')}>📋 Scorecard</button>}
@@ -6209,6 +6243,17 @@ function OfficialProfile({ official: o, onBack, likes, onLike }) {
           {posts.length > 0 ? posts.map(p => (
             <PostCard key={p.id} post={p} onProfile={() => {}} liked={likes.includes(p.id)} onLike={onLike} />
           )) : <p className="no-posts">No posts yet.</p>}
+        </div>
+      )}
+      {profTab === 'activity' && (
+        <div style={{padding:'0.5rem 1rem'}}>
+          {legLoading ? (
+            <p style={{fontSize:'0.8rem', color:'var(--text-2)', textAlign:'center', padding:'2rem 0'}}>Loading legislative activity…</p>
+          ) : legActivity.length > 0 ? legActivity.map(item => (
+            <LiveFeedCard key={item.id} item={item} />
+          )) : (
+            <p style={{fontSize:'0.8rem', color:'var(--text-2)', textAlign:'center', padding:'2rem 0'}}>No legislative activity found for {o.name}.</p>
+          )}
         </div>
       )}
       {profTab === 'budget' && <BudgetTab official={o} />}
@@ -6362,7 +6407,7 @@ React.useEffect(() => {
       )}
       <main className="app-main">
         {profile ? (
-          <OfficialProfile official={profile} onBack={() => setProfile(null)} likes={likes} onLike={toggleLike} />
+          <OfficialProfile official={profile} onBack={() => setProfile(null)} likes={likes} onLike={toggleLike} zip={zip} />
         ) : (
           <>
             {tab==='feed' && <FeedTab zip={zip} userName={userName} onProfile={openProfile} likes={likes} onLike={toggleLike} onPostRead={markPostRead} remoteOfficials={remoteOfficials} followedLocations={followedLocations} onAddLocation={() => setShowLocModal(true)} pollVotes={pollVotes} onPollVote={recordPollVote} pinnedPosts={pinnedPosts} onPin={togglePin} liveOfficials={liveOfficials} liveFeedItems={liveFeedItems} />}
