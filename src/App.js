@@ -3970,13 +3970,26 @@ const group = mergedOfficials.filter(o => getBranch(o) === branch);
                   </button>
                 );
               };
-              const hasCategories = filteredSubGroup.some(o => o.category);
-              if (!hasCategories) {
-                return filteredSubGroup.map(renderCard);
-              }
+              const deriveCategory = (o) => {
+                if (o.category) return o.category;
+                const t = (o.title || '').toLowerCase();
+                const b = getBranch(o);
+                if (b === 'Judicial') return 'Judiciary';
+                if (b === 'Executive') return 'Executive';
+                if (t.includes('senator') || t.includes('senate')) return 'Senate';
+                if (t.includes('representative') || t.includes('house of') || t.includes('congressman') || t.includes('congresswoman')) return 'House of Representatives';
+                if (t.includes('sheriff') || t.includes('police chief')) return 'Law Enforcement';
+                if (t.includes('state attorney')) return 'State Attorney';
+                if (t.includes('public defender')) return 'Public Defender';
+                if (t.includes('clerk') || t.includes('tax collector') || t.includes('property appraiser') || t.includes('supervisor of elections')) return 'Constitutional Officers';
+                if (t.includes('county commissioner') || (t.includes('commissioner') && getLevel(o) === 'Local')) return 'County Commission';
+                if (t.includes('school board')) return 'School Board';
+                if (t.includes('mayor') || t.includes('city council') || t.includes('city ')) return 'City Government';
+                return 'Other';
+              };
               const byCategory = {};
               filteredSubGroup.forEach(o => {
-                const cat = o.category || 'Other';
+                const cat = deriveCategory(o);
                 if (!byCategory[cat]) byCategory[cat] = [];
                 byCategory[cat].push(o);
               });
