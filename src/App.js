@@ -3667,6 +3667,13 @@ function ExploreTab({ onProfile, liveOfficials = [], zip = '' }) {
   const [expandedScorecard, setExpandedScorecard] = useState(null);
   const [collapsedLevels, setCollapsedLevels] = useState([]);
   const [collapsedSubLevels, setCollapsedSubLevels] = useState([]);
+  const [collapsedCategories, setCollapsedCategories] = useState([]);
+  const CATEGORY_ORDER = {
+    Federal: ['Executive', 'Senate', 'House of Representatives'],
+    State: ['Executive', 'Senate', 'House of Representatives', 'Judiciary', 'State Attorney', 'Public Defender'],
+    Local: ['Law Enforcement', 'Constitutional Officers', 'County Commission', 'School Board', 'City Government'],
+  };
+  const toggleCategory = (key) => setCollapsedCategories(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
   const [showCityRole, setShowCityRole] = useState(false);
   const [showCityOverview, setShowCityOverview] = useState(false);
   const [expandedCityScorecard, setExpandedCityScorecard] = useState(null);
@@ -3785,9 +3792,7 @@ const group = mergedOfficials.filter(o => getBranch(o) === branch);
                   {isSubCollapsed ? null : <>
 
             {/* Commission panel injected under Local */}
-            {branch === 'Legislative' && subLevel === 'Local' && (
-              isLocalDataAvailable ? (
-              isFlaqlerZipExplore ? (
+            {branch === 'Legislative' && subLevel === 'Local' && isFlaqlerZipExplore && (
               <div className="commission-section">
                 <div className="commission-intro-row">
                   <div className="commission-intro-text">
@@ -3821,7 +3826,7 @@ const group = mergedOfficials.filter(o => getBranch(o) === branch);
                           <div className="exp-role">{o.title}</div>
                         </div>
                         <div className="exp-stats">
-                          
+
                         </div>
                         <span className="exp-chevron">›</span>
                       </button>
@@ -3834,12 +3839,11 @@ const group = mergedOfficials.filter(o => getBranch(o) === branch);
                   );
                 })}
               </div>
-              ) : null
-              ) : (
+            )}
+            {branch === 'Legislative' && subLevel === 'Local' && !isFlaqlerZipExplore && !liveOfficials.some(o => (o.level || '').toLowerCase() === 'local') && (
               <div className="commission-section" style={{padding:'1rem', textAlign:'center', color:'#94a3b8'}}>
                 <p style={{margin:0}}>🔜 Local officials data coming soon for this area.</p>
               </div>
-              )
             )}
 
             {/* City Council section under Local */}
@@ -3946,25 +3950,56 @@ const group = mergedOfficials.filter(o => getBranch(o) === branch);
               </div>
             )}
 
-            {subGroup.filter(o => !commissionerIds.includes(o.id) && !cityCouncilIds.includes(o.id) && !schoolBoardIds.includes(o.id)).map(o => {
-              // Extract county from ZIP lookup for state-level officials
+            {(() => {
+              const filteredSubGroup = subGroup.filter(o => !commissionerIds.includes(o.id) && !cityCouncilIds.includes(o.id) && !schoolBoardIds.includes(o.id));
+              if (filteredSubGroup.length === 0) return null;
               const zipCity = FL_ZIP_CITY[zip] || '';
               const countyMatch = zipCity.match(/,\s*(.+)$/);
               const countyLabel = countyMatch ? countyMatch[1] : '';
-              const showCounty = getLevel(o) === 'State' && !(o.title || '').toLowerCase().includes('governor') && countyLabel;
-              return (
-              <button key={o.id || o.name} className="exp-card" onClick={() => onProfile(o)}>
-                <OfficialAvatar official={o} size={44} radius={12} />
-                <div className="exp-info">
-                  <div className="exp-name">{o.name} <span style={{ color: partyColor(o.party), fontSize:'0.7rem', fontWeight:800 }}>{o.party}</span></div>
-                  <div className="exp-role">{o.title}{showCounty ? ` · ${countyLabel}` : ''}</div>
-                </div>
-                <div className="exp-stats">
-                </div>
-                <span className="exp-chevron">›</span>
-              </button>
-              );
-            })}
+              const renderCard = (o) => {
+                const showCounty = getLevel(o) === 'State' && !(o.title || '').toLowerCase().includes('governor') && countyLabel;
+                return (
+                  <button key={o.id || o.name} className="exp-card" onClick={() => onProfile(o)}>
+                    <OfficialAvatar official={o} size={44} radius={12} />
+                    <div className="exp-info">
+                      <div className="exp-name">{o.name} <span style={{ color: partyColor(o.party), fontSize:'0.7rem', fontWeight:800 }}>{o.party}</span></div>
+                      <div className="exp-role">{o.title}{showCounty ? ` · ${countyLabel}` : ''}</div>
+                    </div>
+                    <div className="exp-stats"></div>
+                    <span className="exp-chevron">›</span>
+                  </button>
+                );
+              };
+              const hasCategories = filteredSubGroup.some(o => o.category);
+              if (!hasCategories) {
+                return filteredSubGroup.map(renderCard);
+              }
+              const byCategory = {};
+              filteredSubGroup.forEach(o => {
+                const cat = o.category || 'Other';
+                if (!byCategory[cat]) byCategory[cat] = [];
+                byCategory[cat].push(o);
+              });
+              const order = CATEGORY_ORDER[subLevel] || [];
+              const orderedCats = [
+                ...order.filter(c => byCategory[c]),
+                ...Object.keys(byCategory).filter(c => !order.includes(c)),
+              ];
+              return orderedCats.map(cat => {
+                const catKey = `${branch}-${subLevel}-${cat}`;
+                const isCatCollapsed = collapsedCategories.includes(catKey);
+                const items = byCategory[cat];
+                return (
+                  <div key={catKey}>
+                    <button onClick={() => toggleCategory(catKey)} style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'5px 18px',background:'#f8fafc',border:'none',borderBottom:'1px solid #e2e8f0',cursor:'pointer',textAlign:'left'}}>
+                      <span style={{fontSize:'0.7rem',fontWeight:600,color:'#475569'}}>{cat} ({items.length})</span>
+                      <span style={{color:'#94a3b8',fontSize:'0.6rem'}}>{isCatCollapsed ? '▼' : '▲'}</span>
+                    </button>
+                    {!isCatCollapsed && items.map(renderCard)}
+                  </div>
+                );
+              });
+            })()}
                   </>}
                 </div>
               );
