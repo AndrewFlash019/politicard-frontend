@@ -2971,8 +2971,13 @@ function LiveFeedCard({ item }) {
               {shown}
             </div>
           )}
-          <div style={{display:'flex', alignItems:'center', gap:'0.5rem', marginTop:'0.4rem'}}>
+          <div style={{display:'flex', alignItems:'center', gap:'0.5rem', marginTop:'0.4rem', flexWrap:'wrap'}}>
             <span style={{fontSize:'0.7rem', color:'#94a3b8'}}>{item.official_name}</span>
+            {(item.published_at || item.date) && (
+              <span style={{fontSize:'0.7rem', color:'#94a3b8'}}>
+                · {new Date(item.published_at || item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              </span>
+            )}
             {item.bill_url && <a href={item.bill_url} target="_blank" rel="noopener noreferrer" style={{fontSize:'0.7rem', color:'var(--accent)', textDecoration:'none'}}>View Bill →</a>}
           </div>
         </div>
@@ -3086,9 +3091,12 @@ function FeedTab({ zip, userName, onProfile, likes, onLike, onPostRead, remoteOf
           <div className="live-feed-header" style={{padding:'0.5rem 1rem', fontSize:'0.75rem', fontWeight:700, color:'#64748b', textTransform:'uppercase', letterSpacing:'0.05em'}}>
             📋 Recent Legislative Activity
           </div>
-          {liveFeedItems.slice(0, 10).map(item => (
-            <LiveFeedCard key={item.id} item={item} />
-          ))}
+          {[...liveFeedItems]
+            .sort((a, b) => new Date(b.published_at || b.date || 0) - new Date(a.published_at || a.date || 0))
+            .slice(0, 10)
+            .map(item => (
+              <LiveFeedCard key={item.id} item={item} />
+            ))}
         </div>
       )}
 
