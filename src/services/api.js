@@ -137,6 +137,30 @@ export async function checkBackendHealth() {
   }
 }
 
+// Fetch county metrics by ZIP
+export async function fetchMetricsByZip(zip) {
+  try {
+    const token = window._psToken || localStorage.getItem('politiscore_token') || '';
+    const response = await fetch(`${BASE_URL}/metrics/zip/${zip}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Backend returned ${response.status}`);
+    }
+
+    const data = await response.json();
+    return { success: true, data };
+  } catch (err) {
+    console.error('PolitiCard metrics error:', err);
+    return { success: false, data: null };
+  }
+}
+
 // Fetch real feed items (legislation, votes) by ZIP
 export async function fetchFeedByZip(zip) {
   try {

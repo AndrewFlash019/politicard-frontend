@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import './App.css';
-import { fetchOfficialsByZip, fetchFeedByZip } from './services/api';
+import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip } from './services/api';
 import Login from './Login';
 
 // ─── LOGO COMPONENTS ──────────────────────────────────────────────────────────
@@ -3642,7 +3642,7 @@ function CommissionerScorecard({ officialId }) {
   );
 }
 
-function ExploreTab({ onProfile, liveOfficials = [], zip = '' }) {
+function ExploreTab({ onProfile, liveOfficials = [], zip = '', countyMetrics = null }) {
   const FLAGLER_ZIPS = ['32110','32136','32137','32164'];
   const LOCAL_COVERED_ZIPS = new Set([
     // Flagler
@@ -4012,12 +4012,42 @@ const group = mergedOfficials.filter(o => getBranch(o) === branch);
                 const catKey = `${branch}-${subLevel}-${cat}`;
                 const isCatCollapsed = collapsedCategories.includes(catKey);
                 const items = byCategory[cat];
+                const catMetrics = countyMetrics?.metrics?.[cat] || [];
+                const formatMetric = (m) => {
+                  const raw = (m.value || '').toString();
+                  const t = (m.type || '').toLowerCase();
+                  if (t === 'currency') {
+                    const n = Number(raw.replace(/[^0-9.-]/g, ''));
+                    if (!Number.isFinite(n)) return raw;
+                    if (n >= 1e9) return `$${(n/1e9).toFixed(1)}B`;
+                    if (n >= 1e6) return `$${Math.round(n/1e6)}M`;
+                    if (n >= 1e3) return `$${Math.round(n/1e3)}K`;
+                    return `$${n}`;
+                  }
+                  if (t === 'percent' || t === 'percentage') return raw.endsWith('%') ? raw : `${raw}%`;
+                  return raw;
+                };
                 return (
                   <div key={catKey}>
                     <button onClick={() => toggleCategory(catKey)} style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'5px 18px',background:'#f8fafc',border:'none',borderBottom:'1px solid #e2e8f0',cursor:'pointer',textAlign:'left'}}>
                       <span style={{fontSize:'0.7rem',fontWeight:600,color:'#475569'}}>{cat} ({items.length})</span>
                       <span style={{color:'#94a3b8',fontSize:'0.6rem'}}>{isCatCollapsed ? '▼' : '▲'}</span>
                     </button>
+                    {!isCatCollapsed && catMetrics.length > 0 && (
+                      <div style={{padding:'0.6rem 0.9rem 0.5rem', background:'linear-gradient(135deg, #eef2ff 0%, #f5f3ff 100%)', borderBottom:'1px solid #e0e7ff'}}>
+                        <div style={{display:'flex', flexWrap:'wrap', gap:'0.4rem'}}>
+                          {catMetrics.map((m, idx) => (
+                            <div key={idx} style={{background:'#ffffff', borderRadius:'0.5rem', padding:'0.35rem 0.55rem', border:'1px solid #e0e7ff', minWidth:0}}>
+                              <div style={{fontSize:'0.55rem', fontWeight:700, color:'#6366f1', textTransform:'uppercase', letterSpacing:'0.04em'}}>{m.name}</div>
+                              <div style={{fontSize:'0.8rem', fontWeight:700, color:'#1e293b'}}>{formatMetric(m)}</div>
+                            </div>
+                          ))}
+                        </div>
+                        {countyMetrics?.county && (
+                          <div style={{fontSize:'0.6rem', color:'#94a3b8', marginTop:'0.35rem'}}>Source: {countyMetrics.county} County</div>
+                        )}
+                      </div>
+                    )}
                     {!isCatCollapsed && items.map(renderCard)}
                   </div>
                 );
@@ -6364,6 +6394,7 @@ export default function App() {
   };
   const [liveOfficials, setLiveOfficials] = useState([]);
   const [liveFeedItems, setLiveFeedItems] = useState([]);
+  const [countyMetrics, setCountyMetrics] = useState(null);
 
 React.useEffect(() => {
   if (!zip) return;
@@ -6375,6 +6406,13 @@ React.useEffect(() => {
   fetchFeedByZip(zip).then(result => {
     if (result.success && result.items.length > 0) {
       setLiveFeedItems(result.items);
+    }
+  });
+  fetchMetricsByZip(zip).then(result => {
+    if (result.success) {
+      setCountyMetrics(result.data);
+    } else {
+      setCountyMetrics(null);
     }
   });
 }, [zip]);
@@ -6471,7 +6509,7 @@ React.useEffect(() => {
         ) : (
           <>
             {tab==='feed' && <FeedTab zip={zip} userName={userName} onProfile={openProfile} likes={likes} onLike={toggleLike} onPostRead={markPostRead} remoteOfficials={remoteOfficials} followedLocations={followedLocations} onAddLocation={() => setShowLocModal(true)} pollVotes={pollVotes} onPollVote={recordPollVote} pinnedPosts={pinnedPosts} onPin={togglePin} liveOfficials={liveOfficials} liveFeedItems={liveFeedItems} />}
-{tab==='explore' && <ExploreTab onProfile={openProfile} liveOfficials={liveOfficials} zip={zip} />}
+{tab==='explore' && <ExploreTab onProfile={openProfile} liveOfficials={liveOfficials} zip={zip} countyMetrics={countyMetrics} />}
             {tab==='notifications' && <NotificationsTab onProfile={openProfile} readNotifIds={readNotifIds} onReadNotif={id => setReadNotifIds(prev => prev.includes(id) ? prev : [...prev, id])} />}
             {tab==='profile' && <MyProfileTab zip={zip} userName={userName} userPhoto={userPhoto} onPhotoChange={setUserPhoto} postsRead={readPostIds.size} likes={likes} followedLocations={followedLocations} onManageLocations={() => setShowLocModal(true)} pollVotesCount={pollVotes.length} pinnedPosts={pinnedPosts} onUnpin={(id) => setPinnedPosts(prev => prev.filter(p => p.id !== id))} onLogout={handleLogout} liveOfficials={liveOfficials} liveFeedItems={liveFeedItems} />}
           </>
