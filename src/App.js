@@ -4241,7 +4241,7 @@ function DimensionBars({ scores }) {
   );
 }
 
-function MyProfileTab({ zip, userName, userPhoto, onPhotoChange, postsRead, likes, followedLocations = [], onManageLocations, pollVotesCount = 0, pinnedPosts = [], onUnpin, onLogout }) {
+function MyProfileTab({ zip, userName, userPhoto, onPhotoChange, postsRead, likes, followedLocations = [], onManageLocations, pollVotesCount = 0, pinnedPosts = [], onUnpin, onLogout, liveOfficials = [], liveFeedItems = [] }) {
   const fileRef = useRef();
   const [showQuiz, setShowQuiz] = useState(false);
   const [typology, setTypology] = useState(null);
@@ -4271,11 +4271,13 @@ function MyProfileTab({ zip, userName, userPhoto, onPhotoChange, postsRead, like
 
   if (showQuiz) return <TypologyQuiz onComplete={(t, scores) => { setTypology(t); setRawScores(scores); setShowQuiz(false); }} />;
 
+  const localLiveCount = liveOfficials.filter(o => (o.level || '').toLowerCase() === 'local').length;
+  const likedBillsCount = likes.filter(id => { const post = FEED_ALL.find(p=>p.id===id); return post && post.type==='legislation'; }).length;
   const stats = [
-    { n: OFFICIALS.length, l: 'Officials in Feed' },
+    { n: liveOfficials.length, l: 'Officials in Feed' },
     { n: likes.length, l: 'Posts Liked' },
-    { n: likes.filter(id => { const post = FEED_ALL.find(p=>p.id===id); return post && post.type==='legislation'; }).length, l: 'Bills Tracked' },
-    { n: OFFICIALS.filter(o=>o.level==='Local').length, l: 'Local Officials' },
+    { n: liveFeedItems.length > 0 ? liveFeedItems.length : likedBillsCount, l: 'Bills Tracked' },
+    { n: localLiveCount, l: 'Local Officials' },
   ];
 
   const LANGS = [
@@ -4328,7 +4330,7 @@ function MyProfileTab({ zip, userName, userPhoto, onPhotoChange, postsRead, like
             </div>
             <div className="myp-loc-card-city">{LOCATION_DB[zip]?.city || 'Your City'}</div>
             <div className="myp-loc-card-state">{LOCATION_DB[zip]?.state || 'FL'} · {zip}</div>
-            <div className="myp-loc-card-count">{OFFICIALS.length} officials</div>
+            <div className="myp-loc-card-count">{liveOfficials.length} officials</div>
           </div>
 
           {/* Followed location cards */}
@@ -6463,7 +6465,7 @@ React.useEffect(() => {
             {tab==='feed' && <FeedTab zip={zip} userName={userName} onProfile={openProfile} likes={likes} onLike={toggleLike} onPostRead={markPostRead} remoteOfficials={remoteOfficials} followedLocations={followedLocations} onAddLocation={() => setShowLocModal(true)} pollVotes={pollVotes} onPollVote={recordPollVote} pinnedPosts={pinnedPosts} onPin={togglePin} liveOfficials={liveOfficials} liveFeedItems={liveFeedItems} />}
 {tab==='explore' && <ExploreTab onProfile={openProfile} liveOfficials={liveOfficials} zip={zip} />}
             {tab==='notifications' && <NotificationsTab onProfile={openProfile} readNotifIds={readNotifIds} onReadNotif={id => setReadNotifIds(prev => prev.includes(id) ? prev : [...prev, id])} />}
-            {tab==='profile' && <MyProfileTab zip={zip} userName={userName} userPhoto={userPhoto} onPhotoChange={setUserPhoto} postsRead={readPostIds.size} likes={likes} followedLocations={followedLocations} onManageLocations={() => setShowLocModal(true)} pollVotesCount={pollVotes.length} pinnedPosts={pinnedPosts} onUnpin={(id) => setPinnedPosts(prev => prev.filter(p => p.id !== id))} onLogout={handleLogout} />}
+            {tab==='profile' && <MyProfileTab zip={zip} userName={userName} userPhoto={userPhoto} onPhotoChange={setUserPhoto} postsRead={readPostIds.size} likes={likes} followedLocations={followedLocations} onManageLocations={() => setShowLocModal(true)} pollVotesCount={pollVotes.length} pinnedPosts={pinnedPosts} onUnpin={(id) => setPinnedPosts(prev => prev.filter(p => p.id !== id))} onLogout={handleLogout} liveOfficials={liveOfficials} liveFeedItems={liveFeedItems} />}
           </>
         )}
       </main>
