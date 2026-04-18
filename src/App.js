@@ -6339,11 +6339,27 @@ function OfficialProfile({ official: o, onBack, likes, onLike, zip }) {
         <div style={{padding:'0.5rem 1rem'}}>
           {legLoading ? (
             <p style={{fontSize:'0.8rem', color:'var(--text-2)', textAlign:'center', padding:'2rem 0'}}>Loading legislative activity…</p>
-          ) : legActivity.length > 0 ? legActivity.map(item => (
+          ) : legActivity.length === 0 ? (
+            <p style={{fontSize:'0.8rem', color:'var(--text-2)', textAlign:'center', padding:'2rem 0'}}>No legislative activity tracked for this official yet</p>
+          ) : legActivity.length >= 10 ? (
+            Object.entries(
+              legActivity.reduce((acc, it) => {
+                const d = it.published_at || it.date;
+                const yr = d ? new Date(d).getFullYear() : 'Undated';
+                (acc[yr] = acc[yr] || []).push(it);
+                return acc;
+              }, {})
+            )
+              .sort(([a], [b]) => (b === 'Undated' ? -1 : a === 'Undated' ? 1 : Number(b) - Number(a)))
+              .map(([year, items]) => (
+                <React.Fragment key={year}>
+                  <div style={{fontSize:'0.62rem', fontWeight:800, textTransform:'uppercase', letterSpacing:'0.07em', color:'#94a3b8', margin:'0.85rem 0 0.4rem'}}>{year}</div>
+                  {items.map(item => <LiveFeedCard key={item.id} item={item} />)}
+                </React.Fragment>
+              ))
+          ) : legActivity.map(item => (
             <LiveFeedCard key={item.id} item={item} />
-          )) : (
-            <p style={{fontSize:'0.8rem', color:'var(--text-2)', textAlign:'center', padding:'2rem 0'}}>No legislative activity found for {o.name}.</p>
-          )}
+          ))}
         </div>
       )}
       {profTab === 'budget' && <BudgetTab official={o} />}
