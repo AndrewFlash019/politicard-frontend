@@ -161,6 +161,33 @@ export async function fetchMetricsByZip(zip) {
   }
 }
 
+// Fetch metrics relevant to a specific official by id
+export async function fetchOfficialMetrics(officialId) {
+  try {
+    const token = window._psToken || localStorage.getItem('politiscore_token') || '';
+    const response = await fetch(`${BASE_URL}/officials/${officialId}/metrics`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      },
+    });
+
+    if (response.status === 404) {
+      return { success: true, items: [] };
+    }
+    if (!response.ok) {
+      throw new Error(`Backend returned ${response.status}`);
+    }
+
+    const data = await response.json();
+    return { success: true, items: Array.isArray(data) ? data : [] };
+  } catch (err) {
+    console.error('PolitiCard official metrics error:', err);
+    return { success: false, items: [] };
+  }
+}
+
 // Fetch legislative activity for a specific official by id
 export async function fetchOfficialLegislation(officialId) {
   try {

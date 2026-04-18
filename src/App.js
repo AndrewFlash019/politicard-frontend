@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import './App.css';
-import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip, fetchOfficialLegislation } from './services/api';
+import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip, fetchOfficialLegislation, fetchOfficialMetrics } from './services/api';
 import Login from './Login';
 
 // ─── LOGO COMPONENTS ──────────────────────────────────────────────────────────
@@ -6253,10 +6253,64 @@ function ContributorsTab({ official }) {
   );
 }
 
+function deriveMetricsHeader(items) {
+  if (!items || items.length === 0) return 'Key Metrics';
+  const counties = new Set(items.map(i => i.county).filter(Boolean));
+  const categories = new Set(items.map(i => i.category).filter(Boolean));
+  if (counties.size !== 1) return 'Key Metrics';
+  const county = [...counties][0];
+  if (county === 'Florida') return 'Florida at a Glance';
+  const category = categories.size === 1 ? [...categories][0] : null;
+  if (category === 'City Government') return `City of ${county} at a Glance`;
+  if (category === 'School Board') return `${county} County Schools at a Glance`;
+  return `${county} County at a Glance`;
+}
+
+function formatMetricValue(m) {
+  const raw = (m.metric_value || '').toString();
+  const t = (m.metric_type || '').toLowerCase();
+  if (t === 'currency') {
+    const n = Number(raw.replace(/[^0-9.-]/g, ''));
+    if (!Number.isFinite(n)) return raw;
+    if (n >= 1e9) return `$${(n / 1e9).toFixed(1)}B`;
+    if (n >= 1e6) return `$${Math.round(n / 1e6)}M`;
+    if (n >= 1e3) return `$${Math.round(n / 1e3)}K`;
+    return `$${n}`;
+  }
+  if (t === 'percent' || t === 'percentage') return raw.endsWith('%') ? raw : `${raw}%`;
+  if (t === 'count') {
+    const n = Number(raw.replace(/[^0-9.-]/g, ''));
+    if (Number.isFinite(n)) return n.toLocaleString();
+    return raw;
+  }
+  return raw;
+}
+
+function OfficialMetricsCard({ items }) {
+  if (!items || items.length === 0) return null;
+  const header = deriveMetricsHeader(items);
+  return (
+    <div style={{margin:'0.75rem 1rem', padding:'0.85rem 0.95rem', background:'linear-gradient(135deg, #eef2ff 0%, #f5f3ff 100%)', border:'1px solid #e0e7ff', borderRadius:'0.85rem'}}>
+      <div style={{fontSize:'0.7rem', fontWeight:800, color:'#475569', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'0.55rem'}}>
+        {header}
+      </div>
+      <div style={{display:'flex', flexWrap:'wrap', gap:'0.45rem'}}>
+        {items.map((m, idx) => (
+          <div key={idx} style={{background:'#ffffff', borderRadius:'0.5rem', padding:'0.4rem 0.6rem', border:'1px solid #e0e7ff', minWidth:0}}>
+            <div style={{fontSize:'0.55rem', fontWeight:700, color:'#6366f1', textTransform:'uppercase', letterSpacing:'0.04em'}}>{m.metric_name}</div>
+            <div style={{fontSize:'0.85rem', fontWeight:700, color:'#1e293b'}}>{formatMetricValue(m)}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function OfficialProfile({ official: o, onBack, likes, onLike, zip }) {
   const [profTab, setProfTab] = useState('posts');
   const [legActivity, setLegActivity] = useState([]);
   const [legLoading, setLegLoading] = useState(false);
+  const [officialMetrics, setOfficialMetrics] = useState([]);
   const posts = FEED_ALL.filter(p => p.official.id === o.id);
   const mc = o.typologyMatch >= 65 ? '#16a34a' : o.typologyMatch >= 45 ? '#d97706' : '#dc2626';
   const hasBudget = !!BUDGETS[o.id];
@@ -6272,6 +6326,15 @@ function OfficialProfile({ official: o, onBack, likes, onLike, zip }) {
       .finally(() => {
         if (!cancelled) setLegLoading(false);
       });
+    return () => { cancelled = true; };
+  }, [o.id]);
+
+  React.useEffect(() => {
+    if (!o.id) return;
+    let cancelled = false;
+    fetchOfficialMetrics(o.id).then(result => {
+      if (!cancelled) setOfficialMetrics(result.items || []);
+    });
     return () => { cancelled = true; };
   }, [o.id]);
 
@@ -6393,6 +6456,8 @@ function OfficialProfile({ official: o, onBack, likes, onLike, zip }) {
           <div className="typo-ends"><span>Low alignment</span><span>High alignment</span></div>
         </div>
       )}
+
+      <OfficialMetricsCard items={officialMetrics} />
 
       <div className="prof-tabs">
         <button className={`prof-tab-btn ${profTab==='posts'?'prof-tab-active':''}`} onClick={() => setProfTab('posts')}>📝 Posts</button>
