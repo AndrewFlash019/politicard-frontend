@@ -188,6 +188,34 @@ export async function fetchOfficialMetrics(officialId) {
   }
 }
 
+// Fetch FEC campaign finance data for a specific official by id
+export async function fetchOfficialDonors(officialId) {
+  try {
+    const token = window._psToken || localStorage.getItem('politiscore_token') || '';
+    const response = await fetch(`${BASE_URL}/officials/${officialId}/donors`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      },
+    });
+
+    if (response.status === 404) {
+      return { success: true, data: null };
+    }
+    if (!response.ok) {
+      throw new Error(`Backend returned ${response.status}`);
+    }
+
+    const data = await response.json();
+    const hasData = data && typeof data === 'object' && Object.keys(data).length > 0;
+    return { success: true, data: hasData ? data : null };
+  } catch (err) {
+    console.error('PolitiCard official donors error:', err);
+    return { success: false, data: null };
+  }
+}
+
 // Fetch legislative activity for a specific official by id
 export async function fetchOfficialLegislation(officialId) {
   try {

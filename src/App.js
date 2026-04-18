@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import './App.css';
-import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip, fetchOfficialLegislation, fetchOfficialMetrics } from './services/api';
+import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip, fetchOfficialLegislation, fetchOfficialMetrics, fetchOfficialDonors } from './services/api';
 import Login from './Login';
 
 // ─── LOGO COMPONENTS ──────────────────────────────────────────────────────────
@@ -6027,228 +6027,172 @@ function SheriffMetricsPanel({ official }) {
 
 // ─── CONTRIBUTORS TAB ────────────────────────────────────────────────────────
 
-function ContributorsTab({ official }) {
-  const data = CONTRIBUTORS[official.id];
-  const [expandedDonor, setExpandedDonor] = useState(null);
-  const [expandedIndustry, setExpandedIndustry] = useState(null);
+function fmtDonorCurrency(n) {
+  const num = Number(n);
+  if (!Number.isFinite(num) || num === 0) return '$0';
+  if (num >= 1000000) return '$' + (num / 1000000).toFixed(1) + 'M';
+  if (num >= 1000) return '$' + Math.round(num / 1000) + 'K';
+  return '$' + Math.round(num).toLocaleString();
+}
 
-  if (!data) return (
-    <div className="contrib-empty">
-      <div className="contrib-empty-icon">📊</div>
-      <div className="contrib-empty-title">Contributor data coming soon</div>
-      <p className="contrib-empty-sub">
-        Campaign finance records for {official.title} are being compiled from public filings.
-        Data sourced from Florida Division of Elections and FEC.
-      </p>
+function fmtPercent(p) {
+  const num = Number(p);
+  if (!Number.isFinite(num)) return '';
+  return num.toFixed(num >= 10 ? 0 : 1) + '%';
+}
+
+function ContributorsTab({ official }) {
+  const [donors, setDonors] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  React.useEffect(() => {
+    if (!official.id) return;
+    let cancelled = false;
+    setLoading(true);
+    fetchOfficialDonors(official.id)
+      .then(result => {
+        if (!cancelled) setDonors(result.data);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [official.id]);
+
+  if (loading) {
+    return (
+      <div style={{padding:'2rem 1rem', textAlign:'center'}}>
+        <p style={{fontSize:'0.8rem', color:'var(--text-2)'}}>Loading campaign finance data…</p>
+      </div>
+    );
+  }
+
+  if (!donors) {
+    return (
+      <div style={{padding:'2.5rem 1.25rem', textAlign:'center'}}>
+        <div style={{fontSize:'2rem', marginBottom:'0.5rem'}}>💵</div>
+        <div style={{fontSize:'0.95rem', fontWeight:700, color:'var(--text-1)', marginBottom:'0.35rem'}}>
+          Campaign finance data not yet available for this official
+        </div>
+        <p style={{fontSize:'0.75rem', color:'var(--muted)', lineHeight:1.5, maxWidth:'26rem', margin:'0 auto'}}>
+          Available for federal officials who filed in the 2024 election cycle
+        </p>
+      </div>
+    );
+  }
+
+  const fmt = fmtDonorCurrency;
+  const cycle = donors.cycle || 2024;
+  const topDonors = Array.isArray(donors.top_donors) ? donors.top_donors.slice(0, 10) : [];
+
+  const statCard = (label, value, sub) => (
+    <div style={{
+      flex:'1 1 calc(50% - 0.375rem)',
+      minWidth:'8rem',
+      background:'var(--card)',
+      border:'1px solid var(--border)',
+      borderRadius:'0.75rem',
+      padding:'0.75rem 0.85rem',
+    }}>
+      <div style={{fontSize:'0.6rem', fontWeight:700, color:'var(--muted)', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'0.3rem'}}>
+        {label}
+      </div>
+      <div style={{fontSize:'1.1rem', fontWeight:800, color:'var(--text-1)', letterSpacing:'-0.02em'}}>
+        {value}
+      </div>
+      {sub && (
+        <div style={{fontSize:'0.7rem', fontWeight:600, color:'var(--accent)', marginTop:'0.15rem'}}>
+          {sub}
+        </div>
+      )}
     </div>
   );
 
-  const fmt = (n) => n >= 1000000 ? '$' + (n/1000000).toFixed(1) + 'M' : n >= 1000 ? '$' + (n/1000).toFixed(0) + 'K' : '$' + n.toLocaleString();
-
   return (
-    <div className="contrib-tab">
-
-      {/* Sample data disclaimer */}
-      <div className="contrib-sample-warning">
-        ⚠️ <strong>Sample Data</strong> — Contributor figures shown are illustrative placeholders pending backend integration with OpenSecrets.org and Florida Division of Elections public filings. Do not treat as verified campaign finance data.
+    <div style={{padding:'0.75rem 1rem 1.5rem'}}>
+      {/* Stat cards */}
+      <div style={{display:'flex', flexWrap:'wrap', gap:'0.5rem'}}>
+        {statCard('Total Raised', fmt(donors.total_raised))}
+        {statCard('Cash on Hand', fmt(donors.cash_on_hand))}
+        {statCard(
+          'From Individuals',
+          fmt(donors.individual_contributions),
+          donors.individual_percentage != null ? fmtPercent(donors.individual_percentage) + ' of total' : null
+        )}
+        {statCard(
+          'From PACs',
+          fmt(donors.pac_contributions),
+          donors.pac_percentage != null ? fmtPercent(donors.pac_percentage) + ' of total' : null
+        )}
       </div>
 
-      {/* Cycle summary */}
-      <div className="contrib-summary">
-        <div className="contrib-total-block">
-          <span className="contrib-total-num">{fmt(data.cycleTotal)}</span>
-          <span className="contrib-total-label">Total raised · {data.cycle}</span>
-        </div>
-        <div className="contrib-small-donor">
-          <div className="contrib-small-bar-wrap">
-            <div className="contrib-small-bar" style={{ width: data.smallDonorPct + '%' }} />
-          </div>
-          <span className="contrib-small-label">{data.smallDonorPct}% from small donors (&lt;$200)</span>
-        </div>
+      <hr style={{border:'none', borderTop:'1px solid var(--border)', margin:'1.25rem 0 0.85rem'}} />
+
+      <div style={{fontSize:'0.85rem', fontWeight:800, color:'var(--text-1)', marginBottom:'0.6rem'}}>
+        Top 10 Donors
       </div>
 
-      {/* Noteworthy flag — shown when there's a potential conflict */}
-      {data.noteworthy && (
-        <div className="contrib-flag">
-          <span className="contrib-flag-icon">🚩</span>
-          <div>
-            <div className="contrib-flag-title">Noteworthy relationship</div>
-            <p className="contrib-flag-text">{data.noteworthy}</p>
-          </div>
+      {topDonors.length === 0 ? (
+        <p style={{fontSize:'0.75rem', color:'var(--muted)', padding:'0.5rem 0'}}>
+          Itemized donor records not available for this cycle.
+        </p>
+      ) : (
+        <div style={{display:'flex', flexDirection:'column', gap:'0.4rem'}}>
+          {topDonors.map((donor, i) => (
+            <div key={i} style={{
+              display:'flex',
+              alignItems:'center',
+              gap:'0.6rem',
+              padding:'0.6rem 0.75rem',
+              background:'var(--card)',
+              border:'1px solid var(--border)',
+              borderRadius:'0.65rem',
+            }}>
+              <span style={{fontSize:'0.7rem', fontWeight:700, color:'var(--muted)', minWidth:'1.5rem'}}>
+                #{i + 1}
+              </span>
+              <div style={{flex:1, minWidth:0, display:'flex', alignItems:'center', gap:'0.45rem', flexWrap:'wrap'}}>
+                <span style={{fontSize:'0.8rem', fontWeight:700, color:'var(--text-1)', overflow:'hidden', textOverflow:'ellipsis'}}>
+                  {donor.name}
+                </span>
+                {donor.state && (
+                  <span style={{
+                    fontSize:'0.6rem',
+                    fontWeight:700,
+                    color:'var(--muted)',
+                    background:'var(--border)',
+                    padding:'0.12rem 0.4rem',
+                    borderRadius:'999px',
+                    letterSpacing:'0.04em',
+                  }}>
+                    {donor.state}
+                  </span>
+                )}
+              </div>
+              <span style={{fontSize:'0.85rem', fontWeight:800, color:'var(--accent)', marginLeft:'auto', whiteSpace:'nowrap'}}>
+                {fmt(donor.amount)}
+              </span>
+            </div>
+          ))}
         </div>
       )}
 
-      {/* Industry breakdown — clickable drill-down */}
-      <div className="contrib-section-title">💼 Top Contributing Industries <span className="contrib-tap-hint">Tap to see donors</span></div>
-      <div className="contrib-industries">
-        {data.topIndustries.map((ind, i) => {
-          const meta = INDUSTRY_META[ind.name] || { color: '#64748b', icon: '🏢', why: '' };
-          const isOpen = expandedIndustry === ind.name;
-          // Donors in this industry
-          const industryDonors = data.topDonors.filter(d => d.industry === ind.name);
-          return (
-            <div key={i} className={`contrib-industry-card ${isOpen ? 'contrib-industry-open' : ''}`} style={{ '--ind-color': meta.color }}>
-              <button className="contrib-industry-row" onClick={() => setExpandedIndustry(isOpen ? null : ind.name)}>
-                <div className="contrib-ind-left">
-                  <span className="contrib-ind-icon">{meta.icon}</span>
-                  <div className="contrib-ind-info">
-                    <span className="contrib-ind-name">{ind.name}</span>
-                    <span className="contrib-ind-why">{meta.why}</span>
-                  </div>
-                </div>
-                <div className="contrib-ind-right">
-                  <div className="contrib-ind-bar-wrap">
-                    <div className="contrib-ind-bar" style={{ width: ind.pct + '%', background: meta.color }} />
-                  </div>
-                  <span className="contrib-ind-amt" style={{ color: meta.color }}>{fmt(ind.total)}</span>
-                  <span className="contrib-ind-pct">{ind.pct}%</span>
-                  <span className="contrib-ind-arrow">{isOpen ? '▲' : '▼'}</span>
-                </div>
-              </button>
-
-              {/* Drill-down panel */}
-              {isOpen && (
-                <div className="contrib-ind-drilldown" style={{ borderColor: meta.color + '33' }}>
-                  {/* Industry context */}
-                  <div className="contrib-ind-context">
-                    <div className="contrib-ind-context-label" style={{ color: meta.color }}>
-                      {meta.icon} Why {ind.name} interests donate
-                    </div>
-                    <p className="contrib-ind-context-text">{meta.why}</p>
-                    <div className="contrib-ind-context-stats">
-                      <span>{fmt(ind.total)} total</span>
-                      <span>·</span>
-                      <span>{ind.pct}% of all contributions</span>
-                      <span>·</span>
-                      <span>{industryDonors.length > 0 ? industryDonors.length + ' named donor' + (industryDonors.length > 1 ? 's' : '') : 'PAC contributions'}</span>
-                    </div>
-                  </div>
-
-                  {/* Named donors in this industry */}
-                  {industryDonors.length > 0 ? (
-                    <div className="contrib-ind-donors">
-                      <div className="contrib-ind-donors-label">Named donors in this industry</div>
-                      {industryDonors.map((donor, j) => (
-                        <div key={j} className="contrib-ind-donor-row">
-                          <div className="contrib-ind-donor-info">
-                            <span className="contrib-ind-donor-name">{donor.name}</span>
-                            <span className="contrib-ind-donor-emp">{donor.employer} · {donor.location}</span>
-                            <span className="contrib-ind-donor-rel">{donor.relationship}</span>
-                          </div>
-                          <span className="contrib-ind-donor-amt" style={{ color: meta.color }}>{fmt(donor.amount)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="contrib-ind-no-donors">
-                      Individual donor names for this industry category are aggregated from FEC/state filings.
-                      Full itemized records available at the source link below.
-                    </div>
-                  )}
-
-                  {/* What to watch for */}
-                  <div className="contrib-ind-watchfor">
-                    <div className="contrib-ind-watchfor-label">👁️ What to watch for</div>
-                    <p className="contrib-ind-watchfor-text">
-                      {ind.name === 'Real Estate' && `Check whether ${official.name} has voted on any zoning changes, development approvals, or land use amendments that benefit real estate interests since receiving these donations.`}
-                      {ind.name === 'Finance / Banking' && `Review whether ${official.name} has supported or opposed financial regulation, consumer protection measures, or banking oversight legislation.`}
-                      {ind.name === 'Healthcare' && `Watch for ${official.name}'s positions on insurance regulation, hospital funding, and pharmaceutical pricing legislation.`}
-                      {ind.name === 'Energy' && `Monitor votes on utility rate approvals, pipeline permits, environmental regulations, and renewable energy mandates.`}
-                      {ind.name === 'Agriculture' && `Track positions on water rights, agricultural land protections, and farm subsidy programs.`}
-                      {ind.name === 'Law / Legal' && `Note any positions on tort reform, judicial appointments, or regulatory enforcement that affect legal industry interests.`}
-                      {ind.name === 'Defense' && `Watch for support of defense spending, military contracts, and veterans programs.`}
-                      {ind.name === 'Individual' && `Large individual donors often represent business interests not captured by industry categories. Research each donor's employer and known interests.`}
-                      {!['Real Estate','Finance / Banking','Healthcare','Energy','Agriculture','Law / Legal','Defense','Individual'].includes(ind.name) && `Review voting record for decisions that align with ${ind.name} industry interests.`}
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
+      {/* Footer */}
+      <div style={{marginTop:'1.25rem', paddingTop:'0.85rem', borderTop:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'0.5rem'}}>
+        <span style={{fontSize:'0.7rem', color:'var(--muted)'}}>
+          Cycle: {cycle} • Source: {donors.source || 'Federal Election Commission'}
+        </span>
+        {donors.source_url && (
+          <a
+            href={donors.source_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{fontSize:'0.75rem', fontWeight:700, color:'var(--accent)', textDecoration:'none'}}
+          >
+            View on FEC.gov →
+          </a>
+        )}
       </div>
-
-      {/* Geographic split */}
-      <div className="contrib-section-title">📍 Where the Money Came From</div>
-      <div className="contrib-geo">
-        {data.geographicSplit.map((g, i) => (
-          <div key={i} className="contrib-geo-row">
-            <span className="contrib-geo-region">{g.region}</span>
-            <div className="contrib-geo-track">
-              <div className="contrib-geo-fill" style={{ width: g.pct + '%' }} />
-            </div>
-            <span className="contrib-geo-pct">{g.pct}%</span>
-          </div>
-        ))}
-      </div>
-      <p className="contrib-geo-note">
-        Money raised outside the official's district may indicate national party or industry coordination.
-      </p>
-
-      {/* Top donors list */}
-      <div className="contrib-section-title">👤 Top Individual & PAC Donors</div>
-      <div className="contrib-donors">
-        {data.topDonors.map((donor, i) => {
-          const meta = INDUSTRY_META[donor.industry] || { color: '#64748b', icon: '🏢' };
-          const isOpen = expandedDonor === i;
-          return (
-            <div key={i} className={`contrib-donor-card ${isOpen ? 'contrib-donor-open' : ''}`}>
-              <button className="contrib-donor-row" onClick={() => setExpandedDonor(isOpen ? null : i)}>
-                <div className="contrib-donor-rank">#{i+1}</div>
-                <div className="contrib-donor-info">
-                  <span className="contrib-donor-name">{donor.name}</span>
-                  <span className="contrib-donor-emp">
-                    <span className="contrib-donor-ind-icon">{meta.icon}</span>
-                    {donor.employer} · {donor.location}
-                  </span>
-                </div>
-                <div className="contrib-donor-right">
-                  <span className="contrib-donor-amt" style={{ color: meta.color }}>{fmt(donor.amount)}</span>
-                  <span className="contrib-donor-chevron">{isOpen ? '▲' : '▼'}</span>
-                </div>
-              </button>
-
-              {isOpen && (
-                <div className="contrib-donor-detail">
-                  <div className="contrib-donor-detail-row">
-                    <span className="contrib-detail-label">Industry</span>
-                    <span className="contrib-detail-val" style={{ color: meta.color }}>
-                      {meta.icon} {donor.industry}
-                    </span>
-                  </div>
-                  <div className="contrib-donor-detail-row">
-                    <span className="contrib-detail-label">Location</span>
-                    <span className="contrib-detail-val">📍 {donor.location}</span>
-                  </div>
-                  <div className="contrib-donor-detail-row">
-                    <span className="contrib-detail-label">Amount</span>
-                    <span className="contrib-detail-val" style={{ color: meta.color }}>{fmt(donor.amount)}</span>
-                  </div>
-                  <div className="contrib-why-block">
-                    <div className="contrib-why-label">❓ Why this industry donates</div>
-                    <p className="contrib-why-text">{INDUSTRY_META[donor.industry]?.why || 'Industry relationship data pending.'}</p>
-                  </div>
-                  <div className="contrib-rel-block">
-                    <div className="contrib-rel-label">🔗 Relationship to official</div>
-                    <p className="contrib-rel-text">{donor.relationship}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Source */}
-      <div className="contrib-source-row">
-        <span className="contrib-source-label">Source: {data.source}</span>
-        <a href={data.sourceUrl} target="_blank" rel="noreferrer" className="contrib-source-link">
-          Verify →
-        </a>
-      </div>
-      <p className="contrib-disclaimer">
-        Contribution data is sourced from public campaign finance filings. PolitiCard does not imply wrongdoing by listing donor relationships — this information is public record provided for transparency.
-      </p>
     </div>
   );
 }
