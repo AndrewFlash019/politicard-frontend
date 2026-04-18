@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import './App.css';
-import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip } from './services/api';
+import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip, fetchOfficialLegislation } from './services/api';
 import Login from './Login';
 
 // ─── LOGO COMPONENTS ──────────────────────────────────────────────────────────
@@ -2950,6 +2950,89 @@ function VoteFeedCard({ item, onPollVote, hasVoted }) {
         </div>
       )}
     </article>
+  );
+}
+
+function billStatusStyle(status) {
+  const s = (status || '').toLowerCase();
+  if (s.includes('chapter') || s.includes('signed')) {
+    return { bg: 'rgba(22,163,74,0.15)', fg: '#16a34a', border: 'rgba(22,163,74,0.35)' };
+  }
+  if (s.includes('died') || s.includes('vetoed') || s.includes('withdrawn')) {
+    return { bg: 'rgba(220,38,38,0.15)', fg: '#dc2626', border: 'rgba(220,38,38,0.35)' };
+  }
+  if (s.includes('introduced')) {
+    return { bg: 'rgba(148,163,184,0.15)', fg: '#94a3b8', border: 'rgba(148,163,184,0.35)' };
+  }
+  return { bg: 'rgba(148,163,184,0.15)', fg: '#94a3b8', border: 'rgba(148,163,184,0.35)' };
+}
+
+function BillCard({ bill }) {
+  const status = bill.status || '';
+  const sty = billStatusStyle(status);
+  const dateStr = bill.date ? new Date(bill.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null;
+  const typeLabel = bill.activity_type ? bill.activity_type.replace(/_/g, ' ') : null;
+  return (
+    <div style={{margin:'0.5rem 0', padding:'0.85rem', background:'var(--card)', borderRadius:'0.75rem', border:'1px solid var(--border)'}}>
+      <div style={{display:'flex', alignItems:'center', gap:'0.5rem', flexWrap:'wrap', marginBottom:'0.3rem'}}>
+        {bill.bill_number && (
+          <span style={{fontSize:'0.75rem', fontWeight:800, color:'var(--text-1)'}}>{bill.bill_number}</span>
+        )}
+        {dateStr && (
+          <span style={{fontSize:'0.7rem', color:'#94a3b8'}}>· {dateStr}</span>
+        )}
+        {bill.chamber && (
+          <span style={{fontSize:'0.65rem', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em'}}>· {bill.chamber}</span>
+        )}
+      </div>
+      {bill.title && (
+        <div style={{fontSize:'0.85rem', fontWeight:700, color:'var(--text-1)', lineHeight:1.3, marginBottom:'0.35rem'}}>
+          {bill.title}
+        </div>
+      )}
+      {bill.description && (
+        <div style={{
+          fontSize:'0.75rem',
+          color:'var(--text-2)',
+          lineHeight:1.4,
+          marginBottom:'0.5rem',
+          display:'-webkit-box',
+          WebkitLineClamp:2,
+          WebkitBoxOrient:'vertical',
+          overflow:'hidden',
+        }}>
+          {bill.description}
+        </div>
+      )}
+      <div style={{display:'flex', alignItems:'center', gap:'0.5rem', flexWrap:'wrap'}}>
+        {status && (
+          <span style={{
+            fontSize:'0.65rem',
+            fontWeight:700,
+            padding:'0.2rem 0.5rem',
+            borderRadius:'999px',
+            background: sty.bg,
+            color: sty.fg,
+            border:`1px solid ${sty.border}`,
+            textTransform:'uppercase',
+            letterSpacing:'0.04em',
+          }}>{status}</span>
+        )}
+        {typeLabel && (
+          <span style={{fontSize:'0.65rem', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em'}}>{typeLabel}</span>
+        )}
+        {bill.source_url && (
+          <a
+            href={bill.source_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{fontSize:'0.7rem', color:'var(--accent)', textDecoration:'none', marginLeft:'auto', fontWeight:600}}
+          >
+            View Source →
+          </a>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -6179,25 +6262,18 @@ function OfficialProfile({ official: o, onBack, likes, onLike, zip }) {
   const hasBudget = !!BUDGETS[o.id];
 
   React.useEffect(() => {
-    if (!zip) return;
+    if (!o.id) return;
+    let cancelled = false;
     setLegLoading(true);
-    const token = window._psToken || localStorage.getItem('politiscore_token') || '';
-    fetch(`https://politicard-backend.onrender.com/feed/zip/${zip}`, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-      },
-    })
-      .then(r => r.ok ? r.json() : Promise.reject())
-      .then(data => {
-        const items = (data.items || []).filter(
-          it => it.official_name && it.official_name.toLowerCase() === o.name.toLowerCase()
-        );
-        setLegActivity(items);
+    fetchOfficialLegislation(o.id)
+      .then(result => {
+        if (!cancelled) setLegActivity(result.items || []);
       })
-      .catch(() => setLegActivity([]))
-      .finally(() => setLegLoading(false));
-  }, [zip, o.name]);
+      .finally(() => {
+        if (!cancelled) setLegLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [o.id]);
 
   return (
     <div className="profile-page">
@@ -6344,7 +6420,7 @@ function OfficialProfile({ official: o, onBack, likes, onLike, zip }) {
           ) : legActivity.length >= 10 ? (
             Object.entries(
               legActivity.reduce((acc, it) => {
-                const d = it.published_at || it.date;
+                const d = it.date || it.published_at;
                 const yr = d ? new Date(d).getFullYear() : 'Undated';
                 (acc[yr] = acc[yr] || []).push(it);
                 return acc;
@@ -6354,11 +6430,11 @@ function OfficialProfile({ official: o, onBack, likes, onLike, zip }) {
               .map(([year, items]) => (
                 <React.Fragment key={year}>
                   <div style={{fontSize:'0.62rem', fontWeight:800, textTransform:'uppercase', letterSpacing:'0.07em', color:'#94a3b8', margin:'0.85rem 0 0.4rem'}}>{year}</div>
-                  {items.map(item => <LiveFeedCard key={item.id} item={item} />)}
+                  {items.map(bill => <BillCard key={bill.id} bill={bill} />)}
                 </React.Fragment>
               ))
-          ) : legActivity.map(item => (
-            <LiveFeedCard key={item.id} item={item} />
+          ) : legActivity.map(bill => (
+            <BillCard key={bill.id} bill={bill} />
           ))}
         </div>
       )}
