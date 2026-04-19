@@ -6084,6 +6084,16 @@ function ContributorsTab({ official }) {
   const fmt = fmtDonorCurrency;
   const cycle = donors.cycle || 2024;
   const topDonors = Array.isArray(donors.top_donors) ? donors.top_donors.slice(0, 10) : [];
+  const topPacs = Array.isArray(donors.top_pacs) ? donors.top_pacs.slice(0, 10) : [];
+
+  const indAmt = Number(donors.from_individuals_amount ?? donors.individual_contributions ?? 0);
+  const pacAmt = Number(donors.from_pacs_amount ?? donors.pac_contributions ?? 0);
+  const breakdownTotal = (Number.isFinite(indAmt) ? indAmt : 0) + (Number.isFinite(pacAmt) ? pacAmt : 0);
+  const indPct = breakdownTotal > 0 ? (indAmt / breakdownTotal) * 100 : 0;
+  const pacPct = breakdownTotal > 0 ? (pacAmt / breakdownTotal) * 100 : 0;
+  const IND_COLOR = '#3b82f6';
+  const PAC_COLOR = '#8b5cf6';
+  const PCT_INLINE_MIN = 14;
 
   const statCard = (label, value, sub) => (
     <div style={{
@@ -6108,6 +6118,57 @@ function ContributorsTab({ official }) {
     </div>
   );
 
+  const donorRow = (entry, i, { uppercase = false } = {}) => (
+    <div key={i} style={{
+      display:'flex',
+      alignItems:'center',
+      gap:'0.6rem',
+      padding:'0.6rem 0.75rem',
+      background:'var(--card)',
+      border:'1px solid var(--border)',
+      borderRadius:'0.65rem',
+    }}>
+      <span style={{fontSize:'0.7rem', fontWeight:700, color:'var(--muted)', minWidth:'1.5rem'}}>
+        #{i + 1}
+      </span>
+      <div style={{flex:1, minWidth:0, display:'flex', alignItems:'center', gap:'0.45rem', flexWrap:'wrap'}}>
+        <span style={{
+          fontSize:'0.8rem',
+          fontWeight:700,
+          color:'var(--text-1)',
+          overflow:'hidden',
+          textOverflow:'ellipsis',
+          textTransform: uppercase ? 'uppercase' : 'none',
+          letterSpacing: uppercase ? '0.02em' : 'normal',
+        }}>
+          {entry.name}
+        </span>
+        {entry.state && (
+          <span style={{
+            fontSize:'0.6rem',
+            fontWeight:700,
+            color:'var(--muted)',
+            background:'var(--border)',
+            padding:'0.12rem 0.4rem',
+            borderRadius:'999px',
+            letterSpacing:'0.04em',
+          }}>
+            {entry.state}
+          </span>
+        )}
+      </div>
+      <span style={{fontSize:'0.85rem', fontWeight:800, color:'var(--accent)', marginLeft:'auto', whiteSpace:'nowrap'}}>
+        {fmt(entry.amount)}
+      </span>
+    </div>
+  );
+
+  const sectionHeader = (text) => (
+    <div style={{fontSize:'0.85rem', fontWeight:800, color:'var(--text-1)', marginBottom:'0.6rem'}}>
+      {text}
+    </div>
+  );
+
   return (
     <div style={{padding:'0.75rem 1rem 1.5rem'}}>
       {/* Stat cards */}
@@ -6126,54 +6187,98 @@ function ContributorsTab({ official }) {
         )}
       </div>
 
+      {/* Funding Breakdown */}
       <hr style={{border:'none', borderTop:'1px solid var(--border)', margin:'1.25rem 0 0.85rem'}} />
+      {sectionHeader('Where the money came from')}
+      {breakdownTotal > 0 ? (
+        <div>
+          <div style={{
+            display:'flex',
+            width:'100%',
+            height:'32px',
+            borderRadius:'999px',
+            overflow:'hidden',
+            background:'var(--border)',
+          }}>
+            {indPct > 0 && (
+              <div style={{
+                width: indPct + '%',
+                background: IND_COLOR,
+                display:'flex',
+                alignItems:'center',
+                justifyContent:'center',
+                color:'#fff',
+                fontSize:'0.7rem',
+                fontWeight:800,
+                letterSpacing:'0.02em',
+              }}>
+                {indPct >= PCT_INLINE_MIN ? fmtPercent(indPct) : ''}
+              </div>
+            )}
+            {pacPct > 0 && (
+              <div style={{
+                width: pacPct + '%',
+                background: PAC_COLOR,
+                display:'flex',
+                alignItems:'center',
+                justifyContent:'center',
+                color:'#fff',
+                fontSize:'0.7rem',
+                fontWeight:800,
+                letterSpacing:'0.02em',
+              }}>
+                {pacPct >= PCT_INLINE_MIN ? fmtPercent(pacPct) : ''}
+              </div>
+            )}
+          </div>
+          {(indPct < PCT_INLINE_MIN || pacPct < PCT_INLINE_MIN) && (
+            <div style={{display:'flex', justifyContent:'space-between', marginTop:'0.3rem', fontSize:'0.65rem', fontWeight:700, color:'var(--muted)'}}>
+              <span>{indPct > 0 && indPct < PCT_INLINE_MIN ? 'Individuals ' + fmtPercent(indPct) : ''}</span>
+              <span>{pacPct > 0 && pacPct < PCT_INLINE_MIN ? 'PACs ' + fmtPercent(pacPct) : ''}</span>
+            </div>
+          )}
+          <div style={{display:'flex', flexWrap:'wrap', gap:'1rem', marginTop:'0.55rem', fontSize:'0.7rem', color:'var(--text-2)'}}>
+            <span style={{display:'inline-flex', alignItems:'center', gap:'0.35rem'}}>
+              <span style={{width:'0.55rem', height:'0.55rem', borderRadius:'999px', background:IND_COLOR, display:'inline-block'}}></span>
+              <span style={{fontWeight:700, color:'var(--text-1)'}}>Individuals</span>
+              <span>{fmt(indAmt)}</span>
+            </span>
+            <span style={{display:'inline-flex', alignItems:'center', gap:'0.35rem'}}>
+              <span style={{width:'0.55rem', height:'0.55rem', borderRadius:'999px', background:PAC_COLOR, display:'inline-block'}}></span>
+              <span style={{fontWeight:700, color:'var(--text-1)'}}>PACs</span>
+              <span>{fmt(pacAmt)}</span>
+            </span>
+          </div>
+        </div>
+      ) : (
+        <p style={{fontSize:'0.75rem', color:'var(--muted)', padding:'0.5rem 0'}}>
+          Funding breakdown not available for this cycle.
+        </p>
+      )}
 
-      <div style={{fontSize:'0.85rem', fontWeight:800, color:'var(--text-1)', marginBottom:'0.6rem'}}>
-        Top 10 Donors
-      </div>
-
+      {/* Top Individual Donors */}
+      <hr style={{border:'none', borderTop:'1px solid var(--border)', margin:'1.25rem 0 0.85rem'}} />
+      {sectionHeader('Top Individual Donors')}
       {topDonors.length === 0 ? (
         <p style={{fontSize:'0.75rem', color:'var(--muted)', padding:'0.5rem 0'}}>
           Itemized donor records not available for this cycle.
         </p>
       ) : (
         <div style={{display:'flex', flexDirection:'column', gap:'0.4rem'}}>
-          {topDonors.map((donor, i) => (
-            <div key={i} style={{
-              display:'flex',
-              alignItems:'center',
-              gap:'0.6rem',
-              padding:'0.6rem 0.75rem',
-              background:'var(--card)',
-              border:'1px solid var(--border)',
-              borderRadius:'0.65rem',
-            }}>
-              <span style={{fontSize:'0.7rem', fontWeight:700, color:'var(--muted)', minWidth:'1.5rem'}}>
-                #{i + 1}
-              </span>
-              <div style={{flex:1, minWidth:0, display:'flex', alignItems:'center', gap:'0.45rem', flexWrap:'wrap'}}>
-                <span style={{fontSize:'0.8rem', fontWeight:700, color:'var(--text-1)', overflow:'hidden', textOverflow:'ellipsis'}}>
-                  {donor.name}
-                </span>
-                {donor.state && (
-                  <span style={{
-                    fontSize:'0.6rem',
-                    fontWeight:700,
-                    color:'var(--muted)',
-                    background:'var(--border)',
-                    padding:'0.12rem 0.4rem',
-                    borderRadius:'999px',
-                    letterSpacing:'0.04em',
-                  }}>
-                    {donor.state}
-                  </span>
-                )}
-              </div>
-              <span style={{fontSize:'0.85rem', fontWeight:800, color:'var(--accent)', marginLeft:'auto', whiteSpace:'nowrap'}}>
-                {fmt(donor.amount)}
-              </span>
-            </div>
-          ))}
+          {topDonors.map((donor, i) => donorRow(donor, i))}
+        </div>
+      )}
+
+      {/* Top PACs */}
+      <hr style={{border:'none', borderTop:'1px solid var(--border)', margin:'1.25rem 0 0.85rem'}} />
+      {sectionHeader('Top PACs')}
+      {topPacs.length === 0 ? (
+        <p style={{fontSize:'0.75rem', color:'var(--muted)', padding:'0.5rem 0'}}>
+          No PAC data available for this cycle.
+        </p>
+      ) : (
+        <div style={{display:'flex', flexDirection:'column', gap:'0.4rem'}}>
+          {topPacs.map((pac, i) => donorRow(pac, i, { uppercase: true }))}
         </div>
       )}
 
