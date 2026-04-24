@@ -1165,6 +1165,111 @@ button { cursor: pointer; font-family: 'Sora', sans-serif; border: none; backgro
 .role-meeting-text { font-size:0.72rem; color:#94a3b8; flex:1; }
 .role-watch-btn { font-size:0.68rem; font-weight:700; color:#818cf8; text-decoration:none; white-space:nowrap; }
 
+/* Variants used by CityCouncilRoleCard / SchoolBoardRoleCard. They share
+   .role-card (dark gradient bg) but use different inner class names than
+   CommissionerRoleCard, so they need their own readable-on-dark styles. */
+.role-card { position: relative; }
+
+.role-close {
+  position: absolute;
+  top: 0.85rem;
+  right: 0.95rem;
+  background: none;
+  border: none;
+  color: #64748b;
+  font-size: 0.95rem;
+  cursor: pointer;
+  padding: 0.15rem 0.3rem;
+  line-height: 1;
+}
+.role-close:hover { color: #e2e8f0; }
+
+.role-title {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #ffffff;
+  font-family: 'Lora', serif;
+  margin-bottom: 0.5rem;
+  padding-right: 1.75rem;
+}
+.role-intro {
+  font-size: 0.78rem;
+  color: #cbd5e1;
+  line-height: 1.6;
+  margin-bottom: 1rem;
+}
+
+.role-powers {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+@media (max-width: 400px) { .role-powers { grid-template-columns: 1fr; } }
+
+/* These variants drop <strong>+<p> directly inside .role-power-item rather
+   than using .role-power-label/.role-power-desc. Style by element so they
+   read on the dark card background. */
+.role-power-item > div { min-width: 0; flex: 1; }
+.role-power-item strong {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #e2e8f0;
+  margin-bottom: 0.15rem;
+}
+.role-power-item p {
+  font-size: 0.65rem;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+
+.role-vs-county {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(99,102,241,0.18);
+  border-radius: 10px;
+  padding: 0.8rem 0.85rem;
+  margin-bottom: 0.85rem;
+}
+.role-vs-title {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #e2e8f0;
+  margin-bottom: 0.5rem;
+}
+.role-vs-row {
+  display: grid;
+  grid-template-columns: minmax(6rem, 8rem) 1fr;
+  gap: 0.65rem;
+  align-items: baseline;
+  padding: 0.4rem 0;
+}
+.role-vs-row + .role-vs-row { border-top: 1px solid rgba(255,255,255,0.06); }
+.role-vs-city,
+.role-vs-county-lbl {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #818cf8;
+  white-space: nowrap;
+}
+.role-vs-county-lbl { color: #fbbf24; }
+.role-vs-desc {
+  font-size: 0.7rem;
+  color: #cbd5e1;
+  line-height: 1.45;
+  min-width: 0;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+}
+
+.role-meetings {
+  font-size: 0.72rem;
+  color: #94a3b8;
+  background: rgba(255,255,255,0.04);
+  border-radius: 8px;
+  padding: 0.65rem 0.75rem;
+}
+
 /* ─── COMMISSION OVERVIEW ────────────────────────────────────────────────── */
 
 .commission-section {

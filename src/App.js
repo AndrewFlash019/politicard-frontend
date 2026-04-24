@@ -1016,6 +1016,7 @@ function ZipModal({ currentZip, onClose, onSave }) {
           <div className="modal-zip-row">
             <span>📍</span>
             <input className="modal-zip-inp" type="text" value={val} maxLength={5} autoFocus
+              onFocus={e => e.target.select()}
               onChange={e => { setVal(e.target.value.slice(0,5)); setError(''); }} />
           </div>
           {error && <p className="zip-error" style={{marginTop:'0.4rem'}}>{error}</p>}
