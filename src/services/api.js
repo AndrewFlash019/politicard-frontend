@@ -216,6 +216,60 @@ export async function fetchOfficialDonors(officialId) {
   }
 }
 
+// Fetch funders grouped by industry for a specific official
+export async function fetchOfficialFundersByIndustry(officialId) {
+  try {
+    const token = window._psToken || localStorage.getItem('politiscore_token') || '';
+    const response = await fetch(`${BASE_URL}/officials/${officialId}/funders-by-industry`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      },
+    });
+
+    if (response.status === 404) {
+      return { success: true, items: [] };
+    }
+    if (!response.ok) {
+      throw new Error(`Backend returned ${response.status}`);
+    }
+
+    const data = await response.json();
+    return { success: true, items: Array.isArray(data) ? data : [] };
+  } catch (err) {
+    console.error('PolitiCard funders-by-industry error:', err);
+    return { success: false, items: [] };
+  }
+}
+
+// Fetch campaign spending breakdown for a specific official
+export async function fetchOfficialSpending(officialId) {
+  try {
+    const token = window._psToken || localStorage.getItem('politiscore_token') || '';
+    const response = await fetch(`${BASE_URL}/officials/${officialId}/spending`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      },
+    });
+
+    if (response.status === 404) {
+      return { success: true, data: null };
+    }
+    if (!response.ok) {
+      throw new Error(`Backend returned ${response.status}`);
+    }
+
+    const data = await response.json();
+    return { success: true, data };
+  } catch (err) {
+    console.error('PolitiCard spending error:', err);
+    return { success: false, data: null };
+  }
+}
+
 // Fetch legislative activity for a specific official by id
 export async function fetchOfficialLegislation(officialId) {
   try {

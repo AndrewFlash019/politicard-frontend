@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import './App.css';
-import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip, fetchOfficialLegislation, fetchOfficialMetrics, fetchOfficialDonors } from './services/api';
+import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip, fetchOfficialLegislation, fetchOfficialMetrics, fetchOfficialDonors, fetchOfficialFundersByIndustry, fetchOfficialSpending } from './services/api';
 import Login from './Login';
 
 // ─── LOGO COMPONENTS ──────────────────────────────────────────────────────────
@@ -6041,23 +6041,288 @@ function fmtPercent(p) {
   return num.toFixed(num >= 10 ? 0 : 1) + '%';
 }
 
+const INDUSTRY_PALETTE = ['#3b82f6', '#8b5cf6', '#06b6d4', '#ec4899', '#f59e0b', '#10b981', '#6366f1', '#f43f5e'];
+const SPENDING_PALETTE = ['#6366f1', '#8b5cf6', '#3b82f6', '#06b6d4', '#22c55e', '#f59e0b', '#ec4899', '#94a3b8'];
+
+function StackedBar({ segments, paletteFallback }) {
+  const total = segments.reduce((s, x) => s + (Number(x.value) || 0), 0);
+  if (total <= 0) return null;
+  return (
+    <div style={{
+      display:'flex',
+      width:'100%',
+      height:'32px',
+      borderRadius:'999px',
+      overflow:'hidden',
+      background:'var(--border)',
+    }}>
+      {segments.map((seg, i) => {
+        const pct = ((Number(seg.value) || 0) / total) * 100;
+        if (pct <= 0) return null;
+        const color = seg.color || paletteFallback[i % paletteFallback.length];
+        return (
+          <div key={i} title={`${seg.label}: ${pct.toFixed(1)}%`} style={{
+            width: pct + '%',
+            background: color,
+            display:'flex',
+            alignItems:'center',
+            justifyContent:'center',
+            color:'#fff',
+            fontSize:'0.65rem',
+            fontWeight:800,
+            letterSpacing:'0.02em',
+            overflow:'hidden',
+            whiteSpace:'nowrap',
+          }}>
+            {pct >= 12 ? pct.toFixed(0) + '%' : ''}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function FundersByIndustrySection({ rows, expanded, onToggle, fmt, sectionHeader }) {
+  if (!rows || rows.length === 0) return null;
+  const ranked = rows
+    .map(r => ({ ...r, _amount: Number(r.category_total) || 0 }))
+    .sort((a, b) => b._amount - a._amount);
+  const total = ranked.reduce((s, r) => s + r._amount, 0);
+  if (total <= 0) return null;
+  const top5 = ranked.slice(0, 5);
+  const segments = ranked.map((r, i) => ({
+    label: r.category,
+    value: r._amount,
+    color: INDUSTRY_PALETTE[i % INDUSTRY_PALETTE.length],
+  }));
+
+  return (
+    <>
+      <hr style={{border:'none', borderTop:'1px solid var(--border)', margin:'1.25rem 0 0.85rem'}} />
+      {sectionHeader('Where the PAC money comes from, by industry')}
+      <StackedBar segments={segments} paletteFallback={INDUSTRY_PALETTE} />
+      <div style={{display:'flex', flexDirection:'column', gap:'0.35rem', marginTop:'0.75rem'}}>
+        {top5.map((row, i) => {
+          const color = INDUSTRY_PALETTE[i % INDUSTRY_PALETTE.length];
+          const pct = (row._amount / total) * 100;
+          const isOpen = expanded.has(row.category);
+          const funders = Array.isArray(row.funders) ? row.funders : [];
+          return (
+            <div key={row.category} style={{
+              background:'var(--card)',
+              border:'1px solid var(--border)',
+              borderRadius:'0.65rem',
+              overflow:'hidden',
+            }}>
+              <button
+                type="button"
+                onClick={() => onToggle(row.category)}
+                style={{
+                  display:'flex',
+                  alignItems:'center',
+                  gap:'0.55rem',
+                  width:'100%',
+                  padding:'0.6rem 0.75rem',
+                  background:'transparent',
+                  border:'none',
+                  cursor:'pointer',
+                  textAlign:'left',
+                }}
+              >
+                <span style={{width:'0.7rem', height:'0.7rem', borderRadius:'999px', background:color, flexShrink:0}}></span>
+                <span style={{fontSize:'0.8rem', fontWeight:700, color:'var(--text-1)', flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis'}}>
+                  {row.category}
+                </span>
+                <span style={{fontSize:'0.7rem', fontWeight:700, color:'var(--muted)'}}>
+                  {pct.toFixed(1)}%
+                </span>
+                <span style={{fontSize:'0.85rem', fontWeight:800, color:'var(--accent)', whiteSpace:'nowrap'}}>
+                  {fmt(row._amount)}
+                </span>
+                <span style={{fontSize:'0.7rem', color:'var(--muted)', width:'0.9rem', textAlign:'center'}}>
+                  {isOpen ? '▾' : '▸'}
+                </span>
+              </button>
+              {isOpen && funders.length > 0 && (
+                <div style={{padding:'0.15rem 0.75rem 0.6rem 1.95rem', display:'flex', flexDirection:'column', gap:'0.3rem'}}>
+                  {funders.map((f, j) => (
+                    <div key={j} style={{display:'flex', alignItems:'center', gap:'0.5rem', fontSize:'0.72rem'}}>
+                      <span style={{flex:1, minWidth:0, color:'var(--text-1)', fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
+                        {f.interest_group || f.pac_name}
+                      </span>
+                      {f.interest_group && f.pac_name && f.interest_group !== f.pac_name && (
+                        <span style={{color:'var(--muted)', fontSize:'0.65rem', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'14rem'}}>
+                          {f.pac_name}
+                        </span>
+                      )}
+                      <span style={{fontWeight:800, color:'var(--accent)', whiteSpace:'nowrap'}}>
+                        {fmt(f.amount)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {ranked.length > 5 && (
+        <div style={{fontSize:'0.65rem', color:'var(--muted)', marginTop:'0.4rem', textAlign:'right'}}>
+          + {ranked.length - 5} more {ranked.length - 5 === 1 ? 'industry' : 'industries'}
+        </div>
+      )}
+    </>
+  );
+}
+
+function SpendingBreakdownSection({ spending, fmt, sectionHeader }) {
+  if (!spending) return null;
+  const total = Number(spending.total_spent) || 0;
+  const byCat = Array.isArray(spending.spending_by_category) ? spending.spending_by_category : [];
+  const categorized = Array.isArray(spending.top_vendors_categorized) ? spending.top_vendors_categorized : [];
+  const fallbackVendors = Array.isArray(spending.top_vendors) ? spending.top_vendors : [];
+  if (total <= 0 && byCat.length === 0 && fallbackVendors.length === 0) return null;
+
+  const ranked = [...byCat].sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0));
+  const segments = ranked.map((c, i) => ({
+    label: c.category,
+    value: Number(c.amount) || 0,
+    color: SPENDING_PALETTE[i % SPENDING_PALETTE.length],
+  }));
+
+  // Build top 5 vendors. Prefer categorized view (has category badge); fall back to top_vendors.
+  const vendors = (categorized.length > 0 ? categorized : fallbackVendors)
+    .map(v => ({
+      name: v.vendor_name || v.name,
+      amount: Number(v.amount) || 0,
+      category: v.category || null,
+    }))
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 5);
+
+  // Map category -> color so vendor badges match the bar.
+  const catColor = {};
+  ranked.forEach((c, i) => { catColor[c.category] = SPENDING_PALETTE[i % SPENDING_PALETTE.length]; });
+
+  return (
+    <>
+      <hr style={{border:'none', borderTop:'1px solid var(--border)', margin:'1.25rem 0 0.85rem'}} />
+      {sectionHeader('Campaign spending breakdown')}
+      {total > 0 && (
+        <div style={{display:'flex', alignItems:'baseline', gap:'0.5rem', marginBottom:'0.75rem'}}>
+          <span style={{fontSize:'1.6rem', fontWeight:800, color:'var(--text-1)', letterSpacing:'-0.02em'}}>
+            {fmt(total)}
+          </span>
+          <span style={{fontSize:'0.7rem', fontWeight:700, color:'var(--muted)', textTransform:'uppercase', letterSpacing:'0.05em'}}>
+            total spent
+          </span>
+        </div>
+      )}
+      {segments.length > 0 && (
+        <>
+          <StackedBar segments={segments} paletteFallback={SPENDING_PALETTE} />
+          <div style={{display:'flex', flexWrap:'wrap', gap:'0.6rem 1rem', marginTop:'0.55rem', fontSize:'0.7rem', color:'var(--text-2)'}}>
+            {ranked.slice(0, 5).map((c, i) => (
+              <span key={c.category} style={{display:'inline-flex', alignItems:'center', gap:'0.35rem'}}>
+                <span style={{width:'0.55rem', height:'0.55rem', borderRadius:'999px', background:SPENDING_PALETTE[i % SPENDING_PALETTE.length], display:'inline-block'}}></span>
+                <span style={{fontWeight:700, color:'var(--text-1)'}}>{c.category}</span>
+                <span>{fmt(c.amount)}</span>
+              </span>
+            ))}
+          </div>
+        </>
+      )}
+      {vendors.length > 0 && (
+        <div style={{marginTop:'1rem'}}>
+          <div style={{fontSize:'0.7rem', fontWeight:800, color:'var(--muted)', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'0.45rem'}}>
+            Top vendors
+          </div>
+          <div style={{display:'flex', flexDirection:'column', gap:'0.4rem'}}>
+            {vendors.map((v, i) => {
+              const color = v.category ? (catColor[v.category] || SPENDING_PALETTE[i % SPENDING_PALETTE.length]) : SPENDING_PALETTE[i % SPENDING_PALETTE.length];
+              return (
+                <div key={i} style={{
+                  display:'flex',
+                  alignItems:'center',
+                  gap:'0.6rem',
+                  padding:'0.6rem 0.75rem',
+                  background:'var(--card)',
+                  border:'1px solid var(--border)',
+                  borderRadius:'0.65rem',
+                }}>
+                  <span style={{fontSize:'0.7rem', fontWeight:700, color:'var(--muted)', minWidth:'1.5rem'}}>
+                    #{i + 1}
+                  </span>
+                  <div style={{flex:1, minWidth:0, display:'flex', alignItems:'center', gap:'0.45rem', flexWrap:'wrap'}}>
+                    <span style={{fontSize:'0.8rem', fontWeight:700, color:'var(--text-1)', overflow:'hidden', textOverflow:'ellipsis'}}>
+                      {v.name}
+                    </span>
+                    {v.category && (
+                      <span style={{
+                        fontSize:'0.58rem',
+                        fontWeight:800,
+                        color:'#fff',
+                        background:color,
+                        padding:'0.15rem 0.45rem',
+                        borderRadius:'999px',
+                        letterSpacing:'0.04em',
+                        textTransform:'uppercase',
+                        whiteSpace:'nowrap',
+                      }}>
+                        {v.category}
+                      </span>
+                    )}
+                  </div>
+                  <span style={{fontSize:'0.85rem', fontWeight:800, color:'var(--accent)', marginLeft:'auto', whiteSpace:'nowrap'}}>
+                    {fmt(v.amount)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function ContributorsTab({ official }) {
   const [donors, setDonors] = useState(null);
+  const [industries, setIndustries] = useState([]);
+  const [spending, setSpending] = useState(null);
+  const [expandedIndustries, setExpandedIndustries] = useState(() => new Set());
   const [loading, setLoading] = useState(true);
 
   React.useEffect(() => {
     if (!official.id) return;
     let cancelled = false;
     setLoading(true);
-    fetchOfficialDonors(official.id)
-      .then(result => {
-        if (!cancelled) setDonors(result.data);
+    setExpandedIndustries(new Set());
+    Promise.all([
+      fetchOfficialDonors(official.id),
+      fetchOfficialFundersByIndustry(official.id),
+      fetchOfficialSpending(official.id),
+    ])
+      .then(([donorsResult, industriesResult, spendingResult]) => {
+        if (cancelled) return;
+        setDonors(donorsResult.data);
+        setIndustries(Array.isArray(industriesResult.items) ? industriesResult.items : []);
+        setSpending(spendingResult.data);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
   }, [official.id]);
+
+  const toggleIndustry = (key) => {
+    setExpandedIndustries(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   if (loading) {
     return (
@@ -6281,6 +6546,18 @@ function ContributorsTab({ official }) {
           {topPacs.map((pac, i) => donorRow(pac, i, { uppercase: true }))}
         </div>
       )}
+
+      {/* Funders by Industry */}
+      <FundersByIndustrySection
+        rows={industries}
+        expanded={expandedIndustries}
+        onToggle={toggleIndustry}
+        fmt={fmt}
+        sectionHeader={sectionHeader}
+      />
+
+      {/* Where the Money Goes */}
+      <SpendingBreakdownSection spending={spending} fmt={fmt} sectionHeader={sectionHeader} />
 
       {/* Footer */}
       <div style={{marginTop:'1.25rem', paddingTop:'0.85rem', borderTop:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'0.5rem'}}>
