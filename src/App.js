@@ -4049,7 +4049,28 @@ const group = mergedOfficials.filter(o => getBranch(o) === branch);
               const countyMatch = zipCity.match(/,\s*(.+)$/);
               const countyLabel = countyMatch ? countyMatch[1] : '';
               const renderCard = (o) => {
-                const showCounty = getLevel(o) === 'State' && !(o.title || '').toLowerCase().includes('governor') && countyLabel;
+                const title = o.title || '';
+                const titleLower = title.toLowerCase();
+                const lvl = getLevel(o);
+                const isStatewideFL =
+                  titleLower.includes('governor of florida') ||
+                  titleLower.includes('lieutenant governor of florida') ||
+                  titleLower.includes('attorney general of florida') ||
+                  titleLower.includes('chief financial officer of florida') ||
+                  titleLower.includes('commissioner of agriculture') ||
+                  titleLower.includes('florida supreme court') ||
+                  titleLower.includes('district court of appeal');
+                const isFederal =
+                  lvl === 'Federal' ||
+                  titleLower.startsWith('u.s. senator') ||
+                  titleLower.startsWith('u.s. representative');
+                const isStateLegislator = /^(?:state\s+)?(?:senator|representative),\s*district\s+\d+/i.test(title);
+                const showCounty =
+                  !!countyLabel &&
+                  lvl === 'Local' &&
+                  !isStatewideFL &&
+                  !isFederal &&
+                  !isStateLegislator;
                 return (
                   <button key={o.id || o.name} className="exp-card" onClick={() => onProfile(o)}>
                     <OfficialAvatar official={o} size={44} radius={12} />
