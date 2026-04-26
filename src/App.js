@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import './App.css';
 import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip, fetchOfficialLegislation, fetchOfficialMetrics, fetchOfficialDonors, fetchOfficialFundersByIndustry, fetchOfficialSpending, fetchOfficialScorecard } from './services/api';
+import FeedV1 from './feed/FeedV1';
 import Login from './Login';
 
 // ─── LOGO COMPONENTS ──────────────────────────────────────────────────────────
@@ -6894,13 +6895,8 @@ function OfficialProfile({ official: o, onBack, likes, onLike, zip }) {
             </div>
             <div className="prof-compact-role">{o.title}</div>
             {o.district && <div style={{fontSize:'0.7rem', color:'var(--text-2)'}}>{o.district}</div>}
-            <div className="prof-compact-badges">
-              {o.typologyMatch > 0 && (
-                <span className="prof-compact-match" style={{ color: mc }}>
-                  {o.typologyMatch}% your match
-                </span>
-              )}
-            </div>
+            {/* "% your match" badge hidden — typology not yet computed from real
+                user preferences. */}
           </div>
           <button className="prof-follow-compact">+ Follow</button>
         </div>
@@ -6917,87 +6913,10 @@ function OfficialProfile({ official: o, onBack, likes, onLike, zip }) {
         </div>
       )}
 
-      {/* Inline donor snapshot — always visible in bio area */}
-      {CONTRIBUTORS[o.id] && (() => {
-        const d = CONTRIBUTORS[o.id];
-        const fmt = (n) => n >= 1000000 ? '$' + (n/1000000).toFixed(1) + 'M' : n >= 1000 ? '$' + (n/1000).toFixed(0) + 'K' : '$' + n;
-        const topInd = d.topIndustries[0];
-        const topDonor = d.topDonors[0];
-        const topMeta = INDUSTRY_META[topInd?.name] || { color: '#64748b', icon: '🏢' };
-        return (
-          <div className="prof-donor-snapshot">
-            <div className="prof-donor-snap-header">
-              <span className="prof-donor-snap-title">💵 Campaign Contributions · {d.cycle}</span>
-              <span className="prof-donor-snap-total">{fmt(d.cycleTotal)} raised</span>
-            </div>
-            {d.noteworthy && (
-              <div className="prof-donor-flag">
-                🚩 <span>{d.noteworthy}</span>
-              </div>
-            )}
-            <div className="prof-donor-snap-grid">
-              <div className="prof-donor-snap-item">
-                <span className="prof-donor-snap-label">Top Industry</span>
-                <span className="prof-donor-snap-val" style={{ color: topMeta.color }}>
-                  {topMeta.icon} {topInd?.name}
-                </span>
-                <span className="prof-donor-snap-sub">{fmt(topInd?.total)} · {topInd?.pct}% of total</span>
-              </div>
-              <div className="prof-donor-snap-item">
-                <span className="prof-donor-snap-label">Largest Donor</span>
-                <span className="prof-donor-snap-val">{topDonor?.name}</span>
-                <span className="prof-donor-snap-sub">{fmt(topDonor?.amount)} · {topDonor?.employer}</span>
-              </div>
-              <div className="prof-donor-snap-item">
-                <span className="prof-donor-snap-label">Small Donors</span>
-                <span className="prof-donor-snap-val" style={{ color: d.smallDonorPct >= 50 ? '#16a34a' : '#d97706' }}>
-                  {d.smallDonorPct}%
-                </span>
-                <span className="prof-donor-snap-sub">Under $200 donations</span>
-              </div>
-              <div className="prof-donor-snap-item">
-                <span className="prof-donor-snap-label">Local Money</span>
-                <span className="prof-donor-snap-val">{d.geographicSplit[0]?.pct}%</span>
-                <span className="prof-donor-snap-sub">From {d.geographicSplit[0]?.region}</span>
-              </div>
-            </div>
-            <div className="prof-donor-industry-bars">
-              {d.topIndustries.slice(0, 4).map((ind, i) => {
-                const m = INDUSTRY_META[ind.name] || { color: '#64748b' };
-                return (
-                  <div key={i} className="prof-donor-ind-row">
-                    <span className="prof-donor-ind-name">{ind.name}</span>
-                    <div className="prof-donor-ind-track">
-                      <div className="prof-donor-ind-fill" style={{ width: ind.pct + '%', background: m.color }} />
-                    </div>
-                    <span className="prof-donor-ind-pct" style={{ color: m.color }}>{ind.pct}%</span>
-                  </div>
-                );
-              })}
-            </div>
-            <p className="prof-donor-snap-note" style={{color:"#f59e0b"}}><strong>⚠️ Sample data</strong> — pending real API integration. 
-              Full donor breakdown available in the Donors tab below. Source: {d.source}.
-            </p>
-          </div>
-        );
-      })()}
-
-      {o.typologyMatch > 0 && (
-        <div className="prof-stats-row">
-          <div className="prof-stat"><span className="ps-num" style={{ color: mc }}>{o.typologyMatch}%</span><span className="ps-lbl">Your Match</span></div>
-        </div>
-      )}
-
-      {o.typologyMatch > 0 && (
-        <div className="typology-section">
-          <div className="typo-header">
-            <span>Preference Similarity</span>
-            <span style={{ color: mc, fontWeight:600 }}>{o.typologyMatch}% match</span>
-          </div>
-          <div className="typo-track"><div className="typo-fill" style={{ width:`${o.typologyMatch}%`, background:mc }} /></div>
-          <div className="typo-ends"><span>Low alignment</span><span>High alignment</span></div>
-        </div>
-      )}
+      {/* Donor snapshot + typology-match sections removed — they were sample data
+          per earlier session. Real donor breakdown lives in the Donors tab below
+          (powered by real API data); typology/match is not yet computed from real
+          user preferences so we don't show fake similarity numbers. */}
 
       <OfficialMetricsCard items={officialMetrics} />
 
@@ -7209,7 +7128,7 @@ React.useEffect(() => {
           <OfficialProfile official={profile} onBack={() => setProfile(null)} likes={likes} onLike={toggleLike} zip={zip} />
         ) : (
           <>
-            {tab==='feed' && <FeedTab zip={zip} userName={userName} onProfile={openProfile} likes={likes} onLike={toggleLike} onPostRead={markPostRead} remoteOfficials={remoteOfficials} followedLocations={followedLocations} onAddLocation={() => setShowLocModal(true)} pollVotes={pollVotes} onPollVote={recordPollVote} pinnedPosts={pinnedPosts} onPin={togglePin} liveOfficials={liveOfficials} liveFeedItems={liveFeedItems} />}
+            {tab==='feed' && <FeedV1 zip={zip} userName={userName} />}
 {tab==='explore' && <ExploreTab onProfile={openProfile} liveOfficials={liveOfficials} zip={zip} countyMetrics={countyMetrics} />}
             {tab==='notifications' && <NotificationsTab onProfile={openProfile} readNotifIds={readNotifIds} onReadNotif={id => setReadNotifIds(prev => prev.includes(id) ? prev : [...prev, id])} />}
             {tab==='profile' && <MyProfileTab zip={zip} userName={userName} userPhoto={userPhoto} onPhotoChange={setUserPhoto} postsRead={readPostIds.size} likes={likes} followedLocations={followedLocations} onManageLocations={() => setShowLocModal(true)} pollVotesCount={pollVotes.length} pinnedPosts={pinnedPosts} onUnpin={(id) => setPinnedPosts(prev => prev.filter(p => p.id !== id))} onLogout={handleLogout} liveOfficials={liveOfficials} liveFeedItems={liveFeedItems} />}

@@ -324,7 +324,7 @@ export async function fetchOfficialScorecard(officialId) {
   }
 }
 
-// Fetch real feed items (legislation, votes) by ZIP
+// Fetch real feed items (legislation, votes) by ZIP — legacy endpoint
 export async function fetchFeedByZip(zip) {
   try {
     const token = window._psToken || localStorage.getItem('politiscore_token') || '';
@@ -345,5 +345,43 @@ export async function fetchFeedByZip(zip) {
   } catch (err) {
     console.error('PolitiCard feed error:', err);
     return { success: false, items: [], total: 0 };
+  }
+}
+
+// Feed Engine v1: structured per-ZIP response with today's brief, since-last-visit,
+// this-week, your-officials, and coming-up sections.
+export async function fetchFeedV1(zip, { lastVisit, limit = 20, offset = 0 } = {}) {
+  try {
+    const params = new URLSearchParams();
+    if (lastVisit) params.set('last_visit', lastVisit);
+    params.set('limit', String(limit));
+    params.set('offset', String(offset));
+    const token = window._psToken || localStorage.getItem('politiscore_token') || '';
+    const response = await fetch(`${BASE_URL}/feed/${zip}?${params.toString()}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      },
+    });
+    if (!response.ok) throw new Error(`Backend returned ${response.status}`);
+    const data = await response.json();
+    return {
+      success: true,
+      data: {
+        zipCode: data.zip_code,
+        county: data.county || null,
+        today: data.today || { brief: null },
+        sinceLastVisit: data.since_last_visit || [],
+        thisWeek: data.this_week || [],
+        yourOfficials: data.your_officials || [],
+        comingUp: data.coming_up || [],
+        activeCardCount: data.active_card_count || 0,
+        lastRefreshAt: data.last_refresh_at || null,
+      },
+    };
+  } catch (err) {
+    console.error('PolitiCard feed v1 error:', err);
+    return { success: false, data: null, error: String(err.message || err) };
   }
 }
