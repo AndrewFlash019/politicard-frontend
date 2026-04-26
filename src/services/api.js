@@ -297,6 +297,33 @@ export async function fetchOfficialLegislation(officialId) {
   }
 }
 
+// Fetch accountability scorecard for a specific official
+export async function fetchOfficialScorecard(officialId) {
+  try {
+    const token = window._psToken || localStorage.getItem('politiscore_token') || '';
+    const response = await fetch(`${BASE_URL}/officials/${officialId}/accountability-scorecard`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      },
+    });
+
+    if (response.status === 404) {
+      return { success: true, data: null };
+    }
+    if (!response.ok) {
+      throw new Error(`Backend returned ${response.status}`);
+    }
+
+    const data = await response.json();
+    return { success: true, data };
+  } catch (err) {
+    console.error('PolitiCard scorecard error:', err);
+    return { success: false, data: null };
+  }
+}
+
 // Fetch real feed items (legislation, votes) by ZIP
 export async function fetchFeedByZip(zip) {
   try {
