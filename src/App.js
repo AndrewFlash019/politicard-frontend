@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import './App.css';
-import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip, fetchOfficialLegislation, fetchOfficialMetrics, fetchOfficialDonors, fetchOfficialFundersByIndustry, fetchOfficialSpending } from './services/api';
+import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip, fetchOfficialLegislation, fetchOfficialMetrics, fetchOfficialDonors, fetchOfficialFundersByIndustry, fetchOfficialSpending, fetchOfficialScorecard } from './services/api';
 import Login from './Login';
 
 // ─── LOGO COMPONENTS ──────────────────────────────────────────────────────────
@@ -6654,11 +6654,190 @@ function OfficialMetricsCard({ items }) {
   );
 }
 
+const SCORECARD_RATING_STYLES = {
+  'Doing the Job':      { bg: '#ecfdf5', border: '#a7f3d0', fg: '#047857', dot: '#16a34a' },
+  'Mixed Results':      { bg: '#fffbeb', border: '#fde68a', fg: '#92400e', dot: '#f59e0b' },
+  'Underperforming':    { bg: '#fff7ed', border: '#fed7aa', fg: '#9a3412', dot: '#ea580c' },
+  'Insufficient Data':  { bg: '#f1f5f9', border: '#e2e8f0', fg: '#475569', dot: '#94a3b8' },
+};
+
+const METRIC_RATING_STYLES = {
+  excellent:  { bg: '#dcfce7', fg: '#14532d', dot: '#15803d', label: 'Excellent' },
+  good:       { bg: '#ecfdf5', fg: '#065f46', dot: '#16a34a', label: 'Good' },
+  meeting:    { bg: '#dbeafe', fg: '#1e3a8a', dot: '#2563eb', label: 'Meeting' },
+  concerning: { bg: '#fef3c7', fg: '#854d0e', dot: '#d97706', label: 'Concerning' },
+  poor:       { bg: '#fee2e2', fg: '#7f1d1d', dot: '#dc2626', label: 'Poor' },
+  no_data:    { bg: '#f1f5f9', fg: '#64748b', dot: '#94a3b8', label: 'Awaiting data' },
+};
+
+function MetricCard({ metric }) {
+  const rating = metric.rating || 'no_data';
+  const style = METRIC_RATING_STYLES[rating] || METRIC_RATING_STYLES.no_data;
+  const isNoData = rating === 'no_data';
+
+  const sourceHint = metric.source && metric.source !== 'Manual research required' ? metric.source : 'public records';
+  const valueText = metric.value || '';
+  const unitText = metric.unit ? ` ${metric.unit}` : '';
+
+  return (
+    <div style={{
+      background: isNoData ? '#f8fafc' : '#ffffff',
+      border: `1px solid ${isNoData ? '#e2e8f0' : 'var(--border, #e2e8f0)'}`,
+      borderRadius: '0.75rem',
+      padding: '0.85rem 0.95rem',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '0.4rem',
+      opacity: isNoData ? 0.78 : 1,
+      minWidth: 0,
+    }}>
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:'0.5rem'}}>
+        <div style={{fontSize:'0.7rem', fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.04em', flex:1, minWidth:0}}>
+          {metric.label}
+        </div>
+        <span
+          aria-label={`Rating: ${style.label}`}
+          style={{
+            display:'inline-flex', alignItems:'center', gap:'0.25rem',
+            background: style.bg, color: style.fg,
+            fontSize:'0.6rem', fontWeight:800, textTransform:'uppercase', letterSpacing:'0.04em',
+            padding:'0.2rem 0.45rem', borderRadius:'999px', whiteSpace:'nowrap',
+          }}
+        >
+          <span aria-hidden="true" style={{width:'0.45rem', height:'0.45rem', borderRadius:'50%', background: style.dot}} />
+          {style.label}
+        </span>
+      </div>
+
+      {isNoData ? (
+        <div style={{fontSize:'0.75rem', color:'#64748b', lineHeight:1.4}}>
+          Awaiting data ingestion from {sourceHint}.
+        </div>
+      ) : (
+        <>
+          <div style={{fontSize:'1.4rem', fontWeight:800, color:'#0f172a', lineHeight:1.1, wordBreak:'break-word'}}>
+            {valueText}{unitText}
+          </div>
+          {metric.benchmark_value && (
+            <div style={{fontSize:'0.7rem', color:'#64748b'}}>
+              {metric.benchmark_label ? `${metric.benchmark_label}: ` : 'Benchmark: '}
+              {metric.benchmark_value}{metric.unit ? ` ${metric.unit}` : ''}
+            </div>
+          )}
+          {metric.notes && (
+            <div style={{fontSize:'0.7rem', color:'#475569', fontStyle:'italic', lineHeight:1.4}}>
+              {metric.notes}
+            </div>
+          )}
+        </>
+      )}
+
+      <div style={{fontSize:'0.62rem', color:'#94a3b8', marginTop:'auto', paddingTop:'0.25rem'}}>
+        Source: {metric.source_url ? (
+          <a href={metric.source_url} target="_blank" rel="noopener noreferrer" style={{color:'#6366f1', textDecoration:'none'}}>
+            {metric.source}
+          </a>
+        ) : metric.source || 'Public records'}
+        {metric.year ? ` • ${metric.year}` : ''}
+      </div>
+    </div>
+  );
+}
+
+function AccountabilityScorecardSection({ scorecard, loading }) {
+  if (loading) {
+    return (
+      <div style={{margin:'0.75rem 1rem', padding:'0.85rem 0.95rem', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'0.85rem'}}>
+        <div style={{fontSize:'0.7rem', fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em'}}>
+          Loading accountability scorecard…
+        </div>
+        <div style={{marginTop:'0.5rem', display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(220px, 1fr))', gap:'0.5rem'}}>
+          {[0,1,2].map(i => (
+            <div key={i} style={{height:'5rem', background:'#eef2f6', borderRadius:'0.6rem'}} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+  if (!scorecard) return null;
+  const metrics = Array.isArray(scorecard.metrics) ? scorecard.metrics : [];
+  if (metrics.length === 0) return null;
+
+  const overall = scorecard.overall_rating || 'Insufficient Data';
+  const overallStyle = SCORECARD_RATING_STYLES[overall] || SCORECARD_RATING_STYLES['Insufficient Data'];
+  const tracked = scorecard.metrics_tracked || metrics.length;
+  const real = scorecard.metrics_with_real_data ?? metrics.filter(m => m.rating !== 'no_data').length;
+
+  return (
+    <div style={{margin:'0.75rem 1rem'}}>
+      {/* Header card */}
+      <div style={{
+        background: overallStyle.bg,
+        border: `1px solid ${overallStyle.border}`,
+        borderRadius: '0.85rem',
+        padding: '0.95rem 1rem',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '0.85rem',
+        flexWrap: 'wrap',
+      }}>
+        <div style={{display:'flex', flexDirection:'column', gap:'0.25rem', flex:1, minWidth:'12rem'}}>
+          <div style={{fontSize:'0.62rem', fontWeight:800, color:'#475569', textTransform:'uppercase', letterSpacing:'0.07em'}}>
+            Accountability Scorecard
+          </div>
+          <div style={{display:'inline-flex', alignItems:'center', gap:'0.45rem'}}>
+            <span aria-hidden="true" style={{width:'0.7rem', height:'0.7rem', borderRadius:'50%', background: overallStyle.dot}} />
+            <span style={{fontSize:'1.05rem', fontWeight:800, color: overallStyle.fg}}>{overall}</span>
+          </div>
+          <div style={{fontSize:'0.72rem', color:'#475569'}}>
+            {real} of {tracked} accountability metric{tracked === 1 ? '' : 's'} tracked with real data
+          </div>
+        </div>
+        <div
+          title="Performance ratings based on publicly verifiable metrics from official sources (FBI UCR, Florida DOE, Congress.gov, county budgets, etc.). See methodology link."
+          style={{fontSize:'0.65rem', color:'#64748b', maxWidth:'18rem', lineHeight:1.4, textAlign:'right'}}
+        >
+          Ratings sourced from public records (FBI UCR, FL DOE, Congress.gov, county budgets). Hover for methodology.
+        </div>
+      </div>
+
+      {real === 0 && tracked > 0 && (
+        <div style={{
+          marginTop:'0.5rem',
+          padding:'0.7rem 0.85rem',
+          background:'#f1f5f9',
+          border:'1px dashed #cbd5e1',
+          borderRadius:'0.7rem',
+          fontSize:'0.75rem',
+          color:'#475569',
+          lineHeight:1.4,
+        }}>
+          Accountability metrics for this role are being ingested. Check back soon.
+        </div>
+      )}
+
+      {/* Metric grid */}
+      <div style={{
+        marginTop:'0.6rem',
+        display:'grid',
+        gridTemplateColumns:'repeat(auto-fill, minmax(220px, 1fr))',
+        gap:'0.6rem',
+      }}>
+        {metrics.map((m, idx) => (
+          <MetricCard key={`${m.key}-${idx}`} metric={m} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function OfficialProfile({ official: o, onBack, likes, onLike, zip }) {
   const [profTab, setProfTab] = useState('posts');
   const [legActivity, setLegActivity] = useState([]);
   const [legLoading, setLegLoading] = useState(false);
   const [officialMetrics, setOfficialMetrics] = useState([]);
+  const [scorecard, setScorecard] = useState(null);
+  const [scorecardLoading, setScorecardLoading] = useState(false);
   const posts = FEED_ALL.filter(p => p.official.id === o.id);
   const mc = o.typologyMatch >= 65 ? '#16a34a' : o.typologyMatch >= 45 ? '#d97706' : '#dc2626';
   const hasBudget = !!BUDGETS[o.id];
@@ -6683,6 +6862,21 @@ function OfficialProfile({ official: o, onBack, likes, onLike, zip }) {
     fetchOfficialMetrics(o.id).then(result => {
       if (!cancelled) setOfficialMetrics(result.items || []);
     });
+    return () => { cancelled = true; };
+  }, [o.id]);
+
+  React.useEffect(() => {
+    if (!o.id) return;
+    let cancelled = false;
+    setScorecard(null);
+    setScorecardLoading(true);
+    fetchOfficialScorecard(o.id)
+      .then(result => {
+        if (!cancelled) setScorecard(result.data || null);
+      })
+      .finally(() => {
+        if (!cancelled) setScorecardLoading(false);
+      });
     return () => { cancelled = true; };
   }, [o.id]);
 
@@ -6806,6 +7000,8 @@ function OfficialProfile({ official: o, onBack, likes, onLike, zip }) {
       )}
 
       <OfficialMetricsCard items={officialMetrics} />
+
+      <AccountabilityScorecardSection scorecard={scorecard} loading={scorecardLoading} />
 
       <div className="prof-tabs">
         <button className={`prof-tab-btn ${profTab==='posts'?'prof-tab-active':''}`} onClick={() => setProfTab('posts')}>📝 Posts</button>
