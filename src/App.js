@@ -538,7 +538,7 @@ const OFFICIALS = [
     color: '#374151',
     posts: []
   },
-].map(...);
+];
 
 const LEVEL_ORDER = { 'Local': 0, 'State': 1, 'Federal': 2 };
 
