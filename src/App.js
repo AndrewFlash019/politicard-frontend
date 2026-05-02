@@ -4,6 +4,10 @@ import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip, fetchOfficialLe
 import FeedV1 from './feed/FeedV1';
 import Login from './Login';
 
+// Backend IDs are numeric. Frontend-only mocks use 'mock-*' string IDs which
+// must never be sent to /officials/<id>/* endpoints.
+const isFetchableId = (id) => typeof id === 'number' || (typeof id === 'string' && /^\d+$/.test(id));
+
 // ─── LOGO COMPONENTS ──────────────────────────────────────────────────────────
 
 function PolitiCardLogo({ height = 32 }) {
@@ -55,7 +59,7 @@ function PolitiCardIcon({ size = 32 }) {
 
 const OFFICIALS = [
   {
-    id: 20,
+    id: 2,
     name: 'Donald Trump',
     title: 'President of the United States',
     party: 'R',
@@ -73,7 +77,7 @@ const OFFICIALS = [
     ]
   },
   {
-    id: 21,
+    id: 3,
     name: 'JD Vance',
     title: 'Vice President of the United States',
     party: 'R',
@@ -90,7 +94,7 @@ const OFFICIALS = [
     ]
   },
   {
-    id: 1,
+    id: 4,
     name: 'Ashley Moody',
     title: 'U.S. Senator (Junior)',
     party: 'R',
@@ -108,7 +112,7 @@ const OFFICIALS = [
     ]
   },
   {
-    id: 2,
+    id: 5,
     name: 'Rick Scott',
     title: 'U.S. Senator (Senior)',
     party: 'R',
@@ -126,7 +130,7 @@ const OFFICIALS = [
     ]
   },
   {
-    id: 3,
+    id: 27,
     name: 'Randy Fine',
     title: 'U.S. Representative, FL-6',
     party: 'R',
@@ -144,7 +148,7 @@ const OFFICIALS = [
     ]
   },
   {
-    id: 4,
+    id: 28,
     name: 'Ron DeSantis',
     title: 'Governor of Florida',
     party: 'R',
@@ -162,7 +166,7 @@ const OFFICIALS = [
     ]
   },
   {
-    id: 5,
+    id: 'mock-tom-wright',
     name: 'Tom Wright',
     title: 'State Senator, District 7',
     party: 'R',
@@ -179,7 +183,7 @@ const OFFICIALS = [
     ]
   },
   {
-    id: 17,
+    id: 'mock-paul-renner',
     name: 'Paul Renner',
     title: 'State Representative, District 24',
     party: 'R',
@@ -196,7 +200,7 @@ const OFFICIALS = [
     ]
   },
   {
-    id: 6,
+    id: 422,
     name: 'Andy Dance',
     title: 'County Commissioner, District 1',
     party: 'D',
@@ -214,7 +218,7 @@ const OFFICIALS = [
     ]
   },
   {
-    id: 13,
+    id: 423,
     name: "Donald O'Brien",
     title: 'County Commissioner, District 2',
     party: 'R',
@@ -231,7 +235,7 @@ const OFFICIALS = [
     ]
   },
   {
-    id: 14,
+    id: 427,
     name: 'Rick Staly',
     title: 'Flagler County Sheriff',
     party: 'R',
@@ -306,7 +310,7 @@ const OFFICIALS = [
     ]
   },
   {
-    id: 7,
+    id: 417,
     name: 'Mike Norris',
     title: 'Mayor, City of Palm Coast',
     party: 'R',
@@ -324,7 +328,7 @@ const OFFICIALS = [
     ]
   },
   {
-    id: 15,
+    id: 418,
     name: 'Theresa Pontieri',
     title: 'Vice Mayor, District 2',
     party: 'R',
@@ -341,7 +345,7 @@ const OFFICIALS = [
     ]
   },
   {
-    id: 30,
+    id: 419,
     name: 'Ty Miller',
     title: 'City Council Member, District 1',
     party: 'R',
@@ -358,7 +362,7 @@ const OFFICIALS = [
     ]
   },
   {
-    id: 31,
+    id: 420,
     name: 'David Sullivan',
     title: 'City Council Member, District 3',
     party: 'R',
@@ -375,7 +379,7 @@ const OFFICIALS = [
     ]
   },
   {
-    id: 32,
+    id: 421,
     name: 'Charles Gambaro',
     title: 'City Council Member, District 4',
     party: 'R',
@@ -392,7 +396,7 @@ const OFFICIALS = [
     ]
   },
   {
-    id: 16,
+    id: 1679,
     name: 'Will Furry',
     title: 'School Board Chair, District 2',
     party: 'R',
@@ -409,7 +413,7 @@ const OFFICIALS = [
     ]
   },
   {
-    id: 22,
+    id: 1678,
     name: 'Christy Chong',
     title: 'School Board Vice Chair, District 4',
     party: 'R',
@@ -426,7 +430,7 @@ const OFFICIALS = [
     ]
   },
   {
-    id: 23,
+    id: 1677,
     name: 'Lauren Ramirez',
     title: 'School Board Member, District 3',
     party: 'R',
@@ -443,7 +447,7 @@ const OFFICIALS = [
     ]
   },
   {
-    id: 24,
+    id: 1676,
     name: 'Janie Ruddy',
     title: 'School Board Member, District 5',
     party: 'R',
@@ -460,7 +464,7 @@ const OFFICIALS = [
     ]
   },
   {
-    id: 25,
+    id: 'mock-vacant-d1',
     name: 'District 1 — Vacant',
     title: 'School Board, District 1',
     party: '',
@@ -475,7 +479,7 @@ const OFFICIALS = [
     posts: []
   },
   {
-    id: 26,
+    id: 'mock-dawn-nichols',
     name: 'Dawn Nichols',
     title: 'Circuit Court Judge — 7th Circuit',
     party: '',
@@ -490,7 +494,7 @@ const OFFICIALS = [
     posts: []
   },
   {
-    id: 27,
+    id: 'mock-chris-france',
     name: 'Chris France',
     title: 'Circuit Court Judge — 7th Circuit',
     party: '',
@@ -505,7 +509,7 @@ const OFFICIALS = [
     posts: []
   },
   {
-    id: 28,
+    id: 'mock-melissa-distler',
     name: 'Melissa Distler',
     title: 'County Court Judge — Flagler County',
     party: '',
@@ -520,7 +524,7 @@ const OFFICIALS = [
     posts: []
   },
   {
-    id: 29,
+    id: 'mock-andrea-totten',
     name: 'Andrea Totten',
     title: 'County Court Judge — Flagler County',
     party: '',
@@ -2207,7 +2211,7 @@ const SCHOOL_BOARD_DATA = {
   },
   members: {
     // Will Furry — Chair, District 2
-    16: {
+    1679: {
       seat: 'Chair, District 2', termStart: 2022, termEnd: 2026, nextElection: 2026,
       howElected: 'Elected countywide — all 5 seats are elected by all Flagler voters regardless of district',
       committeeRoles: ['Board Chair', 'Flagler County Education Foundation Liaison', 'Florida School Boards Association Representative'],
@@ -2222,7 +2226,7 @@ const SCHOOL_BOARD_DATA = {
       ],
     },
     // Christy Chong — Vice Chair, District 4
-    22: {
+    1678: {
       seat: 'Vice Chair, District 4', termStart: 2022, termEnd: 2026, nextElection: 2026,
       howElected: 'Elected countywide — all 5 seats are elected by all Flagler voters regardless of district',
       committeeRoles: ['Board Vice Chair', 'Curriculum & Instruction Committee', 'School Safety Liaison'],
@@ -2237,7 +2241,7 @@ const SCHOOL_BOARD_DATA = {
       ],
     },
     // Lauren Ramirez — District 3
-    23: {
+    1677: {
       seat: 'District 3', termStart: 2024, termEnd: 2028, nextElection: 2028,
       howElected: 'Elected countywide — all 5 seats are elected by all Flagler voters regardless of district',
       committeeRoles: ['FSBA Emerging Leader 2025', 'Career & Technical Education Committee', 'Student Mental Health Liaison'],
@@ -2252,7 +2256,7 @@ const SCHOOL_BOARD_DATA = {
       ],
     },
     // Janie Ruddy — District 5
-    24: {
+    1676: {
       seat: 'District 5', termStart: 2024, termEnd: 2028, nextElection: 2028,
       howElected: 'Elected countywide — all 5 seats are elected by all Flagler voters regardless of district',
       committeeRoles: ['Special Education Oversight', 'Finance & Budget Committee', 'FSBA Legislative Committee'],
@@ -2368,8 +2372,8 @@ const CITY_COUNCIL_DATA = {
   },
   members: {
     // Mayor Mike Norris
-    7: {
-      officialId: 7,
+    417: {
+      officialId: 417,
       seat: 'Mayor',
       termStart: 2024,
       termEnd: 2028,
@@ -2387,8 +2391,8 @@ const CITY_COUNCIL_DATA = {
       keyPositions: ['Fiscal responsibility and infrastructure-first approach', 'Smart managed growth over rapid development', 'Transparent quarterly financial reporting'],
     },
     // Theresa Pontieri — Vice Mayor District 2
-    15: {
-      officialId: 15,
+    418: {
+      officialId: 418,
       seat: 'Vice Mayor, District 2',
       termStart: 2022,
       termEnd: 2026,
@@ -2405,8 +2409,8 @@ const CITY_COUNCIL_DATA = {
       keyPositions: ['Community-centered development', 'Cultural and arts investment', 'Senior services and quality of life'],
     },
     // Ty Miller — District 1
-    30: {
-      officialId: 30,
+    419: {
+      officialId: 419,
       seat: 'District 1',
       termStart: 2024,
       termEnd: 2028,
@@ -2423,8 +2427,8 @@ const CITY_COUNCIL_DATA = {
       keyPositions: ['Neighborhood infrastructure and road maintenance', 'Managed growth', 'District 1 constituent services'],
     },
     // David Sullivan — District 3
-    31: {
-      officialId: 31,
+    420: {
+      officialId: 420,
       seat: 'District 3',
       termStart: 2025,
       termEnd: 2026,
@@ -2440,8 +2444,8 @@ const CITY_COUNCIL_DATA = {
       keyPositions: ['Fact-based decision making', 'Infrastructure before density increases', 'Fiscal oversight and government accountability'],
     },
     // Charles Gambaro — District 4
-    32: {
-      officialId: 32,
+    421: {
+      officialId: 421,
       seat: 'District 4',
       termStart: 2022,
       termEnd: 2026,
@@ -2478,8 +2482,8 @@ const COMMISSIONER_DATA = {
     watchLive: "https://www.flaglercounty.gov",
   },
   commissioners: {
-    6: {
-      officialId: 6,
+    422: {
+      officialId: 422,
       district: "District 1",
       termStart: 2020,
       termEnd: 2024,
@@ -2497,8 +2501,8 @@ const COMMISSIONER_DATA = {
       keyPositions: ["Conservation land purchases", "Environmental protections", "Infrastructure-first growth"],
       civicScore: 88, transparencyScore: 82, responsiveScore: 91,
     },
-    13: {
-      officialId: 13,
+    423: {
+      officialId: 423,
       district: "District 2",
       termStart: 2022,
       termEnd: 2026,
@@ -2631,7 +2635,7 @@ const VOTE_FEED_CARDS = [
   {
     id: 'vfc2',
     type: 'vote_poll',
-    officialId: 13,
+    officialId: 423,
     level: 'County',
     vote: 'YES',
     bill: 'Comprehensive Plan — Western Rural Lands Amendment',
@@ -2661,7 +2665,7 @@ const VOTE_FEED_CARDS = [
   {
     id: 'vfc4',
     type: 'vote_poll',
-    officialId: 13,
+    officialId: 423,
     level: 'County',
     vote: 'NO',
     bill: 'Affordable Housing Trust Fund',
@@ -3088,7 +3092,7 @@ function FeedTab({ zip, userName, onProfile, likes, onLike, onPostRead, remoteOf
   const isFlaqlerZip = FLAGLER_ZIPS_FEED.includes(zip);
 
   // Officials who represent ALL Florida ZIPs (statewide/national)
-  const STATEWIDE_IDS = new Set([20, 21, 1, 2, 4]); // Trump, JD Vance, Moody, Scott, DeSantis
+  const STATEWIDE_IDS = new Set([2, 3, 4, 5, 28]); // Trump, JD Vance, Moody, Scott, DeSantis
 
   // Build set of live official names for matching
   const liveOfficialNames = new Set(liveOfficials.map(o => o.name.toLowerCase()));
@@ -3774,9 +3778,9 @@ function ExploreTab({ onProfile, liveOfficials = [], zip = '', countyMetrics = n
   const [showSBOverview, setShowSBOverview] = useState(false);
   const [expandedSBScorecard, setExpandedSBScorecard] = useState(null);
 
-  const commissionerIds = [6, 13];
-  const cityCouncilIds = [7, 15, 30, 31, 32];
-  const schoolBoardIds = [16, 22, 23, 24, 25];
+  const commissionerIds = [422, 423];
+  const cityCouncilIds = [417, 418, 419, 420, 421];
+  const schoolBoardIds = [1679, 1678, 1677, 1676, 'mock-vacant-d1'];
 const getBranch = (o) => {
  const t = (o.title || '').toLowerCase();
 
@@ -4844,8 +4848,8 @@ const PROJECT_STATUS_COLORS = {
 };
 
 const BUDGETS = {
-  // Palm Coast — Mayor Norris (id: 7) + all council members share same city budget
-  7: {
+  // Palm Coast — Mayor Norris (id: 417) + all council members share same city budget
+  417: {
     fiscalYear: 'FY 2025–2026',
     total: 290.4,
     prevTotal: 271.8,
@@ -4979,8 +4983,8 @@ const BUDGETS = {
       { label: 'Capital projects funded', value: '14 active', positive: null },
     ]
   },
-  // County Commission — Andy Dance (6) and Donald O'Brien (13) share county budget
-  6: {
+  // County Commission — Andy Dance (422) and Donald O'Brien (423) share county budget
+  422: {
     fiscalYear: 'FY 2025–2026',
     total: 248.0,
     prevTotal: 233.5,
@@ -5097,13 +5101,13 @@ const BUDGETS = {
     ]
   },
 };
-// Council members 15, 30, 31, 32 share city budget with Mayor (id 7)
-BUDGETS[15] = BUDGETS[7];
-BUDGETS[30] = BUDGETS[7];
-BUDGETS[31] = BUDGETS[7];
-BUDGETS[32] = BUDGETS[7];
-// County commissioner O'Brien shares county budget with Dance
-BUDGETS[13] = BUDGETS[6];
+// Council members 418, 419, 420, 421 share city budget with Mayor (id 417)
+BUDGETS[418] = BUDGETS[417];
+BUDGETS[419] = BUDGETS[417];
+BUDGETS[420] = BUDGETS[417];
+BUDGETS[421] = BUDGETS[417];
+// County commissioner O'Brien (423) shares county budget with Dance (422)
+BUDGETS[423] = BUDGETS[422];
 
 // ── Budget sub-components ────────────────────────────────────────────────────
 
@@ -6317,7 +6321,7 @@ function ContributorsTab({ official }) {
   const [loading, setLoading] = useState(true);
 
   React.useEffect(() => {
-    if (!official.id) return;
+    if (!official.id || !isFetchableId(official.id)) return;
     let cancelled = false;
     setLoading(true);
     setExpandedIndustries(new Set());
@@ -6844,7 +6848,7 @@ function OfficialProfile({ official: o, onBack, likes, onLike, zip }) {
   const hasBudget = !!BUDGETS[o.id];
 
   React.useEffect(() => {
-    if (!o.id) return;
+    if (!o.id || !isFetchableId(o.id)) return;
     let cancelled = false;
     setLegLoading(true);
     fetchOfficialLegislation(o.id)
@@ -6858,7 +6862,7 @@ function OfficialProfile({ official: o, onBack, likes, onLike, zip }) {
   }, [o.id]);
 
   React.useEffect(() => {
-    if (!o.id) return;
+    if (!o.id || !isFetchableId(o.id)) return;
     let cancelled = false;
     fetchOfficialMetrics(o.id).then(result => {
       if (!cancelled) setOfficialMetrics(result.items || []);
@@ -6867,7 +6871,7 @@ function OfficialProfile({ official: o, onBack, likes, onLike, zip }) {
   }, [o.id]);
 
   React.useEffect(() => {
-    if (!o.id) return;
+    if (!o.id || !isFetchableId(o.id)) return;
     let cancelled = false;
     setScorecard(null);
     setScorecardLoading(true);
