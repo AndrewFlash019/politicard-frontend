@@ -92,8 +92,9 @@ function FeedCard({ card, isRead, observe, onMarkRead, compact }) {
   );
 }
 
-function BriefCard({ card, isRead, observe, onMarkRead }) {
-  if (!card) {
+function BriefCard({ card, fallbackCard, isRead, observe, onMarkRead }) {
+  // No daily local brief AND no federal fallback — last-resort evergreen
+  if (!card && !fallbackCard) {
     return (
       <section className="fcv1-brief fcv1-brief-evergreen">
         <div className="fcv1-brief-label">TODAY · {todayLabel()}</div>
@@ -102,6 +103,36 @@ function BriefCard({ card, isRead, observe, onMarkRead }) {
           No fresh activity from your reps today. Check back tomorrow — or browse "This week" below
           for recent bills and votes.
         </p>
+      </section>
+    );
+  }
+  // Quiet locally — surface a federal-level card instead of a dead end
+  if (!card && fallbackCard) {
+    return (
+      <section
+        ref={observe(fallbackCard.id)}
+        onClick={() => onMarkRead(fallbackCard.id)}
+        className={`fcv1-brief fcv1-brief-fallback ${isRead ? 'fcv1-brief-read' : ''}`}
+      >
+        <div className="fcv1-brief-label">TODAY · {todayLabel()}</div>
+        <p className="fcv1-brief-eyebrow">Quiet locally — here's what your federal reps are doing:</p>
+        <h2 className="fcv1-brief-title">
+          <span className="fcv1-card-icon">{fallbackCard.icon || '🇺🇸'}</span>
+          {fallbackCard.title}
+        </h2>
+        {fallbackCard.body && <p className="fcv1-brief-body">{fallbackCard.body}</p>}
+        <div className="fcv1-brief-footer">
+          {fallbackCard.relative_time && <span className="fcv1-brief-time">{fallbackCard.relative_time}</span>}
+          {fallbackCard.official_name && <span className="fcv1-brief-official">· {fallbackCard.official_name}</span>}
+          {fallbackCard.source_url && (
+            <a className="fcv1-brief-cta" href={fallbackCard.source_url} target="_blank" rel="noreferrer noopener">
+              VIEW DETAILS →
+            </a>
+          )}
+        </div>
+        {fallbackCard.source && (
+          <div className="fcv1-card-source fcv1-brief-source">Source: {fallbackCard.source}</div>
+        )}
       </section>
     );
   }
@@ -305,6 +336,15 @@ export default function FeedV1({ zip, userName }) {
     Date.now() - new Date(lastVisitAtLoad).getTime() > HOURS_24_MS &&
     data.sinceLastVisit.length > 0;
 
+  // Quiet-day fallback: when no daily local brief is published, surface the
+  // most recent federal card we already have so the section isn't a dead end.
+  const briefFallback =
+    !data.today?.brief
+      ? (data.thisWeek.find((c) => c.official_level === 'federal') ||
+         data.yourOfficials.find((c) => c.official_level === 'federal') ||
+         null)
+      : null;
+
   return (
     <div className="tab-content fcv1-root">
       <WelcomeBack
@@ -315,10 +355,15 @@ export default function FeedV1({ zip, userName }) {
         streak={streak}
       />
 
-      {/* Today's Brief — always rendered (shows evergreen fallback if null) */}
+      {/* Today's Brief — always rendered (federal fallback if no local brief, evergreen if neither) */}
       <BriefCard
         card={data.today?.brief}
-        isRead={data.today?.brief ? isRead(data.today.brief.id) : false}
+        fallbackCard={briefFallback}
+        isRead={
+          data.today?.brief
+            ? isRead(data.today.brief.id)
+            : briefFallback ? isRead(briefFallback.id) : false
+        }
         observe={observe}
         onMarkRead={markRead}
       />
