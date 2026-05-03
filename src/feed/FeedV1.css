@@ -125,6 +125,20 @@
   font-size: 0.72rem;
   color: var(--text-3);
 }
+.fcv1-brief-fallback {
+  background: linear-gradient(135deg, #f4f6fb, #ffffff);
+  border-color: var(--border);
+}
+.fcv1-brief-eyebrow {
+  margin: 0 0 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.fcv1-brief-official {
+  font-size: 0.78rem;
+  color: var(--text-3);
+}
 
 /* Sections */
 .fcv1-section {
