@@ -270,6 +270,33 @@ export async function fetchOfficialSpending(officialId) {
   }
 }
 
+// Top expenditures (FEC schedule_b-derived) for a specific official.
+// Returns {success, data} where data is null when the backend has no
+// expenditure data for this official (so the UI can hide the section).
+export async function fetchOfficialExpenditures(officialId) {
+  try {
+    const token = window._psToken || localStorage.getItem('politiscore_token') || '';
+    const response = await fetch(`${BASE_URL}/officials/${officialId}/expenditures`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      },
+    });
+    if (response.status === 404) {
+      return { success: true, data: null };
+    }
+    if (!response.ok) {
+      throw new Error(`Backend returned ${response.status}`);
+    }
+    const data = await response.json();
+    return { success: true, data };
+  } catch (err) {
+    console.error('PolitiCard expenditures error:', err);
+    return { success: false, data: null };
+  }
+}
+
 // Fetch legislative activity for a specific official by id
 export async function fetchOfficialLegislation(officialId) {
   try {
