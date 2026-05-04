@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import './App.css';
-import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip, fetchOfficialLegislation, fetchOfficialMetrics, fetchOfficialDonors, fetchOfficialFundersByIndustry, fetchOfficialSpending, fetchOfficialScorecard } from './services/api';
+import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip, fetchOfficialLegislation, fetchOfficialMetrics, fetchOfficialDonors, fetchOfficialFundersByIndustry, fetchOfficialSpending, fetchOfficialScorecard, fetchOfficialCommittees } from './services/api';
 import FeedV1 from './feed/FeedV1';
 import Login from './Login';
 
@@ -917,6 +917,46 @@ function resolveLocation(query) {
 }
 
 const FEED_ALL = buildFeed();
+
+// Role-specific bio text by title keyword. Used to replace generic
+// auto-generated "X serves as an elected official" placeholders with a
+// canonical description of what the role actually does.
+const ROLE_DESCRIPTIONS = [
+  ['Tax Collector', "The Tax Collector collects property taxes, issues vehicle registrations and driver licenses on behalf of the state. Every property owner and driver in the county interacts with this office."],
+  ['Sheriff', "The Sheriff is the chief law enforcement officer of the county, overseeing patrol, investigations, and the county jail."],
+  ['Property Appraiser', "The Property Appraiser determines the value of all property in the county for tax purposes. Their assessments directly affect how much property tax every homeowner pays."],
+  ['Supervisor of Elections', "The Supervisor of Elections manages all aspects of the election process including voter registration, early voting, and vote counting."],
+  ['Clerk of Circuit Court', "The Clerk of Courts maintains all court records, processes legal filings, and manages the county's financial records."],
+  ['Clerk of Court', "The Clerk of Courts maintains all court records, processes legal filings, and manages the county's financial records."],
+  ['County Commissioner', "County Commissioners set the county budget, establish policies, and oversee county services including roads, parks, and public safety."],
+  ['School Board', "School Board members set education policy, approve the school budget, and hire the superintendent who runs the district's schools."],
+  ['State Attorney', "The State Attorney prosecutes criminal cases on behalf of the state. They decide which cases to bring to trial and negotiate plea agreements."],
+  ['State Representative', "State Representatives write and vote on Florida state laws, approve the state budget, and represent their district's interests in Tallahassee."],
+  ['State Senator', "State Senators write and vote on Florida state laws, confirm gubernatorial appointments, and represent their district in the Florida Senate."],
+  ['Mayor', "The Mayor is the chief executive of the city, overseeing city staff, proposing the city budget, and representing the city to outside organizations."],
+  ['U.S. Representative', "U.S. Representatives write and vote on federal laws, approve the federal budget, and represent their congressional district in Washington D.C."],
+  ['U.S. Senator', "U.S. Senators write and vote on federal laws, confirm presidential appointments including judges, and represent the entire state in Washington D.C."],
+];
+
+function roleDescription(title) {
+  if (!title) return null;
+  for (const [needle, desc] of ROLE_DESCRIPTIONS) {
+    if (title.includes(needle)) return desc;
+  }
+  return null;
+}
+
+// True when a bio is an auto-generated placeholder we should override
+// with a role description.
+function isPlaceholderBio(bio, name) {
+  if (!bio) return true;
+  const trimmed = bio.trim();
+  if (!trimmed) return true;
+  if (name && trimmed === `${name} serves as an elected official.`) return true;
+  if (/^[A-Z][a-z]+\s+[A-Z][a-z]+\s+serves as an? elected official\.?$/.test(trimmed)) return true;
+  if (trimmed.endsWith(' serves as an elected official.')) return true;
+  return false;
+}
 
 const partyColor = (p) => p === 'R' ? '#dc2626' : '#2563eb';
 const typeIcon = (t) => ({ vote:'🗳️', legislation:'📜', announcement:'📢', event:'📅' }[t] || '💬');
@@ -6039,6 +6079,16 @@ function SheriffMetricsPanel({ official }) {
       <p className="sheriff-lawsuit-note">
         Settlement data is sourced from public county records. Settlements do not constitute admission of wrongdoing. Case numbers should be verified against official court records before citing.
       </p>
+      <div style={{margin:'0.4rem 0 0', textAlign:'right'}}>
+        <a
+          href={`https://www.courtlistener.com/?q=${encodeURIComponent(official.name || '')}&type=r&order_by=score+desc`}
+          target="_blank"
+          rel="noreferrer noopener"
+          style={{fontSize:'0.78rem', fontWeight:700, color:'var(--accent)', textDecoration:'none'}}
+        >
+          🔎 View cases on CourtListener →
+        </a>
+      </div>
 
       {/* Mental health diversions */}
       <div className="sheriff-mh-block">
@@ -6318,6 +6368,7 @@ function ContributorsTab({ official }) {
   const [industries, setIndustries] = useState([]);
   const [spending, setSpending] = useState(null);
   const [expandedIndustries, setExpandedIndustries] = useState(() => new Set());
+  const [donorsExpanded, setDonorsExpanded] = useState(false);
   const [loading, setLoading] = useState(true);
 
   React.useEffect(() => {
@@ -6548,30 +6599,53 @@ function ContributorsTab({ official }) {
         </p>
       )}
 
-      {/* Top Individual Donors */}
-      <hr style={{border:'none', borderTop:'1px solid var(--border)', margin:'1.25rem 0 0.85rem'}} />
-      {sectionHeader('Top Individual Donors')}
-      {topDonors.length === 0 ? (
-        <p style={{fontSize:'0.75rem', color:'var(--muted)', padding:'0.5rem 0'}}>
-          Itemized donor records not available for this cycle.
-        </p>
-      ) : (
-        <div style={{display:'flex', flexDirection:'column', gap:'0.4rem'}}>
-          {topDonors.map((donor, i) => donorRow(donor, i))}
-        </div>
-      )}
+      {/* Show donors / PACs collapsible — funding bar above is always visible */}
+      <div style={{marginTop:'0.85rem', display:'flex', justifyContent:'center'}}>
+        <button
+          onClick={() => setDonorsExpanded(v => !v)}
+          style={{
+            background:'var(--surface)',
+            border:'1px solid var(--border)',
+            color:'var(--accent)',
+            fontWeight:700,
+            fontSize:'0.78rem',
+            padding:'0.5rem 1rem',
+            borderRadius:'10px',
+            cursor:'pointer',
+          }}
+        >
+          {donorsExpanded ? '▲ Hide donors' : `▼ Show donors (${topDonors.length} individuals · ${topPacs.length} PACs)`}
+        </button>
+      </div>
 
-      {/* Top PACs */}
-      <hr style={{border:'none', borderTop:'1px solid var(--border)', margin:'1.25rem 0 0.85rem'}} />
-      {sectionHeader('Top PACs')}
-      {topPacs.length === 0 ? (
-        <p style={{fontSize:'0.75rem', color:'var(--muted)', padding:'0.5rem 0'}}>
-          No PAC data available for this cycle.
-        </p>
-      ) : (
-        <div style={{display:'flex', flexDirection:'column', gap:'0.4rem'}}>
-          {topPacs.map((pac, i) => donorRow(pac, i, { uppercase: true }))}
-        </div>
+      {donorsExpanded && (
+        <>
+          {/* Top Individual Donors */}
+          <hr style={{border:'none', borderTop:'1px solid var(--border)', margin:'1.25rem 0 0.85rem'}} />
+          {sectionHeader('Top Individual Donors')}
+          {topDonors.length === 0 ? (
+            <p style={{fontSize:'0.75rem', color:'var(--muted)', padding:'0.5rem 0'}}>
+              Itemized donor records not available for this cycle.
+            </p>
+          ) : (
+            <div style={{display:'flex', flexDirection:'column', gap:'0.4rem'}}>
+              {topDonors.map((donor, i) => donorRow(donor, i))}
+            </div>
+          )}
+
+          {/* Top PACs */}
+          <hr style={{border:'none', borderTop:'1px solid var(--border)', margin:'1.25rem 0 0.85rem'}} />
+          {sectionHeader('Top PACs')}
+          {topPacs.length === 0 ? (
+            <p style={{fontSize:'0.75rem', color:'var(--muted)', padding:'0.5rem 0'}}>
+              No PAC data available for this cycle.
+            </p>
+          ) : (
+            <div style={{display:'flex', flexDirection:'column', gap:'0.4rem'}}>
+              {topPacs.map((pac, i) => donorRow(pac, i, { uppercase: true }))}
+            </div>
+          )}
+        </>
       )}
 
       {/* Funders by Industry */}
@@ -6836,6 +6910,210 @@ function AccountabilityScorecardSection({ scorecard, loading }) {
   );
 }
 
+// Senate committee code → human description (covers what shows up most often
+// in OpenStates ingestion of US Senate procedural filings). Falls back to the
+// row's own title when a code isn't in the map.
+const COMMITTEE_CODE_DESCRIPTIONS = {
+  SSAS:   { name: 'Senate Armed Services Committee',                   blurb: 'Oversees military policy and the defense budget.' },
+  SSFR:   { name: 'Senate Foreign Relations Committee',                blurb: 'Oversees foreign policy and treaties.' },
+  SSGA:   { name: 'Senate Homeland Security and Governmental Affairs', blurb: 'Oversees federal agencies and disaster response.' },
+  SSBU:   { name: 'Senate Budget Committee',                           blurb: 'Oversees the federal budget and spending.' },
+  SPAG:   { name: 'Senate Special Committee on Aging',                 blurb: 'Advocates for seniors and retirement policy.' },
+  SSAS13: { name: 'Subcommittee on Seapower',                          blurb: '' },
+  SSAS15: { name: 'Subcommittee on Readiness',                         blurb: '' },
+  SSAS17: { name: 'Subcommittee on Personnel',                         blurb: '' },
+};
+
+function lookupCommitteeMeta(code, fallbackTitle) {
+  if (code && COMMITTEE_CODE_DESCRIPTIONS[code]) return COMMITTEE_CODE_DESCRIPTIONS[code];
+  return { name: fallbackTitle || code || 'Committee', blurb: '' };
+}
+
+function BillsSponsoredCard({ officialId }) {
+  const [items, setItems] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(false);
+  const [showCount, setShowCount] = useState(10);
+
+  React.useEffect(() => {
+    if (!officialId || (typeof officialId === 'string' && !/^\d+$/.test(officialId))) {
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    fetchOfficialLegislation(officialId)
+      .then((res) => {
+        if (cancelled) return;
+        // Endpoint returns either an array or {items: []}; legacy clients used the wrapped form
+        const list = Array.isArray(res.items) ? res.items
+          : Array.isArray(res?.data) ? res.data
+          : Array.isArray(res) ? res : [];
+        setItems(list);
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [officialId]);
+
+  if (loading) return null;
+  if (!items || items.length === 0) return null;
+
+  const visible = expanded ? items.slice(0, showCount) : [];
+  const remaining = Math.max(0, items.length - showCount);
+  const truncate = (s, n) => (s && s.length > n ? s.slice(0, n) + '…' : s);
+
+  return (
+    <div style={{margin:'0.75rem 1rem', padding:'0.95rem 1rem', background:'#ffffff', border:'1px solid var(--border)', borderRadius:'0.85rem'}}>
+      <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:'0.75rem'}}>
+        <div>
+          <div style={{fontSize:'0.62rem', fontWeight:800, color:'#475569', textTransform:'uppercase', letterSpacing:'0.07em'}}>
+            Bills Sponsored
+          </div>
+          <div style={{fontSize:'1.25rem', fontWeight:800, color:'#0f172a', marginTop:'0.15rem'}}>
+            {items.length}
+          </div>
+        </div>
+        <button
+          onClick={() => setExpanded(v => !v)}
+          style={{background:'var(--surface)', border:'1px solid var(--border)', color:'var(--accent)', fontWeight:700, fontSize:'0.78rem', padding:'0.45rem 0.85rem', borderRadius:'10px', cursor:'pointer'}}
+        >
+          {expanded ? '▲ Hide bills' : '▼ View all bills'}
+        </button>
+      </div>
+
+      {expanded && (
+        <div style={{marginTop:'0.75rem', display:'flex', flexDirection:'column', gap:'0.5rem'}}>
+          {visible.map((b) => (
+            <div key={b.id} style={{padding:'0.6rem 0.75rem', border:'1px solid var(--border)', borderRadius:'0.6rem', display:'flex', flexDirection:'column', gap:'0.25rem'}}>
+              <div style={{display:'flex', alignItems:'center', gap:'0.5rem', flexWrap:'wrap'}}>
+                {b.bill_number && (
+                  <span style={{fontFamily:"'IBM Plex Mono', monospace, ui-monospace", fontSize:'0.72rem', fontWeight:700, color:'var(--accent)'}}>
+                    {b.bill_number}
+                  </span>
+                )}
+                {b.status && (
+                  <span style={{fontSize:'0.6rem', fontWeight:800, textTransform:'uppercase', letterSpacing:'0.05em', padding:'0.15rem 0.5rem', borderRadius:'999px', background:'#f1f5f9', color:'#475569'}}>
+                    {b.status.replace(/_/g, ' ')}
+                  </span>
+                )}
+                {b.date && (
+                  <span style={{fontSize:'0.7rem', color:'#94a3b8', marginLeft:'auto'}}>{b.date}</span>
+                )}
+              </div>
+              <div style={{fontSize:'0.85rem', fontWeight:600, color:'#0f172a'}}>
+                {truncate(b.title || '(untitled)', 80)}
+              </div>
+              {b.source_url && (
+                <a href={b.source_url} target="_blank" rel="noreferrer noopener" style={{fontSize:'0.72rem', fontWeight:700, color:'var(--accent)', textDecoration:'none', alignSelf:'flex-start'}}>
+                  View →
+                </a>
+              )}
+            </div>
+          ))}
+          {remaining > 0 && (
+            <button
+              onClick={() => setShowCount(c => c + 10)}
+              style={{alignSelf:'center', marginTop:'0.5rem', background:'var(--surface)', border:'1px solid var(--border)', color:'var(--accent)', fontWeight:700, fontSize:'0.78rem', padding:'0.5rem 1rem', borderRadius:'10px', cursor:'pointer'}}
+            >
+              Load more ({remaining} left)
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CommitteeAssignmentsCard({ officialId }) {
+  const [items, setItems] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(false);
+
+  React.useEffect(() => {
+    if (!officialId || (typeof officialId === 'string' && !/^\d+$/.test(officialId))) {
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    fetchOfficialCommittees(officialId).then((res) => {
+      if (cancelled) return;
+      setItems(res.items || []);
+    }).finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [officialId]);
+
+  if (loading) return null;
+  if (!items || items.length === 0) return null;
+
+  // Dedupe by bill_number (committee code)
+  const seen = new Set();
+  const unique = items.filter((c) => {
+    const k = c.bill_number || c.title;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+
+  return (
+    <div style={{margin:'0.75rem 1rem', padding:'0.95rem 1rem', background:'#ffffff', border:'1px solid var(--border)', borderRadius:'0.85rem'}}>
+      <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:'0.75rem'}}>
+        <div>
+          <div style={{fontSize:'0.62rem', fontWeight:800, color:'#475569', textTransform:'uppercase', letterSpacing:'0.07em'}}>
+            Committee Assignments
+          </div>
+          <div style={{fontSize:'1.25rem', fontWeight:800, color:'#0f172a', marginTop:'0.15rem'}}>
+            {unique.length}
+          </div>
+        </div>
+        <button
+          onClick={() => setExpanded(v => !v)}
+          style={{background:'var(--surface)', border:'1px solid var(--border)', color:'var(--accent)', fontWeight:700, fontSize:'0.78rem', padding:'0.45rem 0.85rem', borderRadius:'10px', cursor:'pointer'}}
+        >
+          {expanded ? '▲ Hide committees' : '▼ View committees'}
+        </button>
+      </div>
+
+      {expanded && (
+        <div style={{marginTop:'0.75rem', display:'flex', flexDirection:'column', gap:'0.5rem'}}>
+          {unique.map((c, i) => {
+            const meta = lookupCommitteeMeta(c.bill_number, c.title);
+            return (
+              <div key={i} style={{padding:'0.65rem 0.75rem', border:'1px solid var(--border)', borderRadius:'0.6rem'}}>
+                <div style={{display:'flex', alignItems:'baseline', gap:'0.5rem', flexWrap:'wrap'}}>
+                  {c.bill_number && (
+                    <span style={{fontFamily:"'IBM Plex Mono', monospace, ui-monospace", fontSize:'0.7rem', fontWeight:700, color:'var(--accent)'}}>
+                      {c.bill_number}
+                    </span>
+                  )}
+                  <span style={{fontSize:'0.85rem', fontWeight:700, color:'#0f172a'}}>
+                    {meta.name}
+                  </span>
+                </div>
+                {meta.blurb && (
+                  <p style={{margin:'0.3rem 0 0', fontSize:'0.78rem', color:'var(--text-2)', lineHeight:1.45}}>
+                    {meta.blurb}
+                  </p>
+                )}
+                {c.description && c.description !== meta.blurb && (
+                  <p style={{margin:'0.25rem 0 0', fontSize:'0.74rem', color:'var(--text-3)', fontStyle:'italic'}}>
+                    {c.description}
+                  </p>
+                )}
+                {c.source_url && (
+                  <a href={c.source_url} target="_blank" rel="noreferrer noopener" style={{fontSize:'0.72rem', fontWeight:700, color:'var(--accent)', textDecoration:'none', display:'inline-block', marginTop:'0.35rem'}}>
+                    View →
+                  </a>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function OfficialProfile({ official: o, onBack, likes, onLike, zip }) {
   const [profTab, setProfTab] = useState('posts');
   const [legActivity, setLegActivity] = useState([]);
@@ -6906,7 +7184,12 @@ function OfficialProfile({ official: o, onBack, likes, onLike, zip }) {
         </div>
       </div>
 
-      {o.bio && <p className="prof-bio">{o.bio}</p>}
+      {(() => {
+        const roleDesc = roleDescription(o.title);
+        const useRoleDesc = roleDesc && isPlaceholderBio(o.bio, o.name);
+        const text = useRoleDesc ? roleDesc : o.bio;
+        return text ? <p className="prof-bio">{text}</p> : null;
+      })()}
 
       {/* Contact info */}
       {(o.website || o.phone || o.email) && (
@@ -6923,6 +7206,9 @@ function OfficialProfile({ official: o, onBack, likes, onLike, zip }) {
           user preferences so we don't show fake similarity numbers. */}
 
       <OfficialMetricsCard items={officialMetrics} />
+
+      <BillsSponsoredCard officialId={o.id} />
+      <CommitteeAssignmentsCard officialId={o.id} />
 
       <AccountabilityScorecardSection scorecard={scorecard} loading={scorecardLoading} />
 
