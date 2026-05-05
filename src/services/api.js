@@ -412,3 +412,73 @@ export async function fetchFeedV1(zip, { lastVisit, limit = 20, offset = 0 } = {
     return { success: false, data: null, error: String(err.message || err) };
   }
 }
+
+// ─── Stream feed: chronological mix of legislative_activity for a ZIP ───────
+export async function fetchFeedStream(zip, { limit = 50, offset = 0 } = {}) {
+  try {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    const url = `${BASE_URL}/feed/${zip}/stream?${params.toString()}`;
+    const r = await fetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
+    if (!r.ok) throw new Error(`Backend returned ${r.status}`);
+    const data = await r.json();
+    return { success: true, data };
+  } catch (err) {
+    console.error('PolitiCard stream error:', err);
+    return { success: false, data: null, error: String(err.message || err) };
+  }
+}
+
+// ─── Constituent vote: support / oppose / neutral on a feed card ────────────
+let _ANON_USER_ID = null;
+function anonUserId() {
+  if (_ANON_USER_ID) return _ANON_USER_ID;
+  try {
+    let stored = localStorage.getItem('politicard_anon_uid');
+    if (!stored) {
+      stored = 'anon-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+      localStorage.setItem('politicard_anon_uid', stored);
+    }
+    _ANON_USER_ID = stored;
+  } catch (_) {
+    _ANON_USER_ID = 'anon-volatile-' + Math.random().toString(36).slice(2);
+  }
+  return _ANON_USER_ID;
+}
+
+export async function postConstituentVote({ officialId, feedCardId, position }) {
+  try {
+    const r = await fetch(`${BASE_URL}/constituent-votes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        official_id: officialId,
+        feed_card_id: feedCardId,
+        position,
+        user_id: anonUserId(),
+      }),
+    });
+    if (!r.ok) throw new Error(`Backend returned ${r.status}`);
+    return { success: true, data: await r.json() };
+  } catch (err) {
+    console.error('PolitiCard constituent vote error:', err);
+    return { success: false, data: null };
+  }
+}
+
+// ─── Per-official committees ────────────────────────────────────────────────
+export async function fetchOfficialCommittees(officialId) {
+  try {
+    const r = await fetch(`${BASE_URL}/officials/${officialId}/committees`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (r.status === 404) return { success: true, items: [] };
+    if (!r.ok) throw new Error(`Backend returned ${r.status}`);
+    const data = await r.json();
+    return { success: true, items: Array.isArray(data) ? data : [] };
+  } catch (err) {
+    console.error('PolitiCard committees error:', err);
+    return { success: false, items: [] };
+  }
+}
+

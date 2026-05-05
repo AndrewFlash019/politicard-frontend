@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { useFeedV1 } from './useFeedV1';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useStreak } from './useStreak';
-import { useReadTracker } from './useReadTracker';
+import { fetchFeedStream, postConstituentVote } from '../services/api';
 import './FeedV1.css';
 
 const HOURS_24_MS = 24 * 60 * 60 * 1000;
+const PAGE_SIZE = 50;
+const LAST_VISIT_KEY = 'politiscore_last_visit';
 
 function relativeFromIso(iso) {
   if (!iso) return '';
@@ -24,187 +25,47 @@ function relativeFromIso(iso) {
   return `${Math.floor(days / 365)} year${Math.floor(days / 365) === 1 ? '' : 's'} ago`;
 }
 
-function todayLabel() {
-  return new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+function relativeFromDate(date) {
+  if (!date) return '';
+  // backend date column is YYYY-MM-DD; normalise to local noon to dodge TZ flips
+  const iso = typeof date === 'string' && date.length === 10 ? `${date}T12:00:00` : date;
+  return relativeFromIso(iso);
 }
 
-function formatEventDate(iso) {
-  if (!iso) return '';
-  try {
-    return new Date(iso + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  } catch (_) {
-    return iso;
+function activityIcon(activity_type, vote_position) {
+  if (activity_type === 'vote') {
+    if ((vote_position || '').toLowerCase().startsWith('y')) return '✅';
+    if ((vote_position || '').toLowerCase().startsWith('n')) return '❌';
+    return '🗳️';
   }
+  if (activity_type === 'bill_sponsored') return '📜';
+  if (activity_type === 'bill_cosponsored') return '🤝';
+  if (activity_type === 'committee') return '🏛️';
+  return '📰';
 }
 
-// ---------------------------------------------------------------------------
-// Card primitives
-// ---------------------------------------------------------------------------
-
-function CardBadge({ card }) {
-  if (card.is_new) return <span className="fcv1-badge fcv1-badge-new">NEW</span>;
-  if (card.is_updated) return <span className="fcv1-badge fcv1-badge-updated">UPDATED</span>;
+function levelBadge(level) {
+  const v = (level || '').toLowerCase();
+  if (v === 'federal') return { label: 'FEDERAL', color: '#7c3aed' };
+  if (v === 'state') return { label: 'STATE', color: '#0891b2' };
+  if (v === 'local') return { label: 'LOCAL', color: '#16a34a' };
   return null;
 }
 
-function FeedCard({ card, isRead, observe, onMarkRead, compact }) {
-  const handleClick = () => onMarkRead(card.id);
-  let stateClass = '';
-  if (card.is_new) stateClass = 'fcv1-card-new';
-  else if (card.is_updated) stateClass = 'fcv1-card-updated';
-  else if (isRead) stateClass = 'fcv1-card-read';
-
-  return (
-    <article
-      ref={observe(card.id)}
-      onClick={handleClick}
-      className={`fcv1-card ${stateClass} ${compact ? 'fcv1-card-compact' : ''}`}
-    >
-      <div className="fcv1-card-top">
-        <span className="fcv1-card-icon" aria-hidden="true">{card.icon || '📰'}</span>
-        <div className="fcv1-card-title-block">
-          <h3 className="fcv1-card-title">{card.title}</h3>
-          <div className="fcv1-card-meta">
-            {card.relative_time && <span className="fcv1-card-time">{card.relative_time}</span>}
-            {card.official_name && <span className="fcv1-card-official">· {card.official_name}</span>}
-          </div>
-        </div>
-        <div className="fcv1-card-badges">
-          <CardBadge card={card} />
-          {isRead && !card.is_new && !card.is_updated && (
-            <span className="fcv1-card-check" title="Read">✓</span>
-          )}
-        </div>
-      </div>
-      {card.body && <p className="fcv1-card-body">{card.body}</p>}
-      {(card.source || card.source_url) && (
-        <div className="fcv1-card-source">
-          {card.source_url ? (
-            <a href={card.source_url} target="_blank" rel="noreferrer noopener">
-              Source: {card.source || card.source_url}
-            </a>
-          ) : (
-            <span>Source: {card.source}</span>
-          )}
-        </div>
-      )}
-    </article>
-  );
-}
-
-function BriefCard({ card, fallbackCard, isRead, observe, onMarkRead }) {
-  // No daily local brief AND no federal fallback — last-resort evergreen
-  if (!card && !fallbackCard) {
-    return (
-      <section className="fcv1-brief fcv1-brief-evergreen">
-        <div className="fcv1-brief-label">TODAY · {todayLabel()}</div>
-        <h2 className="fcv1-brief-title">Quiet day in your district.</h2>
-        <p className="fcv1-brief-body">
-          No fresh activity from your reps today. Check back tomorrow — or browse "This week" below
-          for recent bills and votes.
-        </p>
-      </section>
-    );
-  }
-  // Quiet locally — surface a federal-level card instead of a dead end
-  if (!card && fallbackCard) {
-    return (
-      <section
-        ref={observe(fallbackCard.id)}
-        onClick={() => onMarkRead(fallbackCard.id)}
-        className={`fcv1-brief fcv1-brief-fallback ${isRead ? 'fcv1-brief-read' : ''}`}
-      >
-        <div className="fcv1-brief-label">TODAY · {todayLabel()}</div>
-        <p className="fcv1-brief-eyebrow">Quiet locally — here's what your federal reps are doing:</p>
-        <h2 className="fcv1-brief-title">
-          <span className="fcv1-card-icon">{fallbackCard.icon || '🇺🇸'}</span>
-          {fallbackCard.title}
-        </h2>
-        {fallbackCard.body && <p className="fcv1-brief-body">{fallbackCard.body}</p>}
-        <div className="fcv1-brief-footer">
-          {fallbackCard.relative_time && <span className="fcv1-brief-time">{fallbackCard.relative_time}</span>}
-          {fallbackCard.official_name && <span className="fcv1-brief-official">· {fallbackCard.official_name}</span>}
-          {fallbackCard.source_url && (
-            <a className="fcv1-brief-cta" href={fallbackCard.source_url} target="_blank" rel="noreferrer noopener">
-              VIEW DETAILS →
-            </a>
-          )}
-        </div>
-        {fallbackCard.source && (
-          <div className="fcv1-card-source fcv1-brief-source">Source: {fallbackCard.source}</div>
-        )}
-      </section>
-    );
-  }
-  return (
-    <section
-      ref={observe(card.id)}
-      onClick={() => onMarkRead(card.id)}
-      className={`fcv1-brief ${isRead ? 'fcv1-brief-read' : ''}`}
-    >
-      <div className="fcv1-brief-label">TODAY · {todayLabel()}</div>
-      <h2 className="fcv1-brief-title">
-        <span className="fcv1-card-icon">{card.icon || '📰'}</span>
-        {card.title}
-      </h2>
-      {card.body && <p className="fcv1-brief-body">{card.body}</p>}
-      <div className="fcv1-brief-footer">
-        {card.relative_time && <span className="fcv1-brief-time">{card.relative_time}</span>}
-        {card.source_url ? (
-          <a className="fcv1-brief-cta" href={card.source_url} target="_blank" rel="noreferrer noopener">
-            VIEW DETAILS →
-          </a>
-        ) : null}
-      </div>
-      {card.source && (
-        <div className="fcv1-card-source fcv1-brief-source">Source: {card.source}</div>
-      )}
-    </section>
-  );
-}
-
-function ComingUpItem({ event }) {
-  return (
-    <article className="fcv1-cu-item">
-      <div className="fcv1-cu-date">{formatEventDate(event.event_date)}</div>
-      <div className="fcv1-cu-body">
-        <div className="fcv1-cu-title">{event.title}</div>
-        {event.description && <div className="fcv1-cu-desc">{event.description}</div>}
-        {event.related_official_name && (
-          <div className="fcv1-cu-meta">{event.related_official_name}</div>
-        )}
-        {event.source_url && (
-          <a href={event.source_url} target="_blank" rel="noreferrer noopener" className="fcv1-cu-source">
-            {event.source || event.source_url}
-          </a>
-        )}
-      </div>
-    </article>
-  );
-}
-
 // ---------------------------------------------------------------------------
-// Welcome Back header
+// WelcomeBack header (unchanged from prior implementation)
 // ---------------------------------------------------------------------------
 
-function WelcomeBack({ userName, lastVisitIso, sinceCount, yourOfficialsCount, streak }) {
+function WelcomeBack({ userName, lastVisitIso, streak }) {
   if (!lastVisitIso) return null;
   const ms = Date.now() - new Date(lastVisitIso).getTime();
   if (Number.isNaN(ms) || ms < HOURS_24_MS) return null;
   const tone = ms > 7 * HOURS_24_MS * 24 ? "It's been a while." : `Welcome back, ${userName || 'voter'}.`;
-  const sub =
-    sinceCount > 0
-      ? `${sinceCount} update${sinceCount === 1 ? '' : 's'} since ${relativeFromIso(lastVisitIso)}` +
-        (yourOfficialsCount > 0
-          ? `, including ${yourOfficialsCount} from your reps.`
-          : '.')
-      : `Quiet stretch since ${relativeFromIso(lastVisitIso)}.`;
-
   return (
     <header className="fcv1-welcome">
       <div className="fcv1-welcome-text">
         <h1 className="fcv1-welcome-title">{tone}</h1>
-        <p className="fcv1-welcome-sub">{sub}</p>
+        <p className="fcv1-welcome-sub">Latest activity from your reps, newest first.</p>
       </div>
       {streak > 1 && (
         <div className="fcv1-streak" title={`${streak}-day visit streak`}>
@@ -218,71 +79,138 @@ function WelcomeBack({ userName, lastVisitIso, sinceCount, yourOfficialsCount, s
 }
 
 // ---------------------------------------------------------------------------
-// Section components
+// Stream card — bills, votes, committees, local Legistar — one shape
 // ---------------------------------------------------------------------------
 
-function ExpandableList({ items, initial, render, expandLabel, emptyHint }) {
-  const [expanded, setExpanded] = useState(false);
-  if (!items || items.length === 0) {
-    return emptyHint ? <p className="fcv1-empty-hint">{emptyHint}</p> : null;
-  }
-  const visible = expanded ? items : items.slice(0, initial);
-  return (
-    <>
-      {visible.map(render)}
-      {items.length > initial && !expanded && (
-        <button className="fcv1-expand-btn" onClick={() => setExpanded(true)}>
-          {expandLabel(items.length - initial)}
-        </button>
-      )}
-    </>
-  );
-}
+function StreamCard({ item, onVote }) {
+  const [pending, setPending] = useState(false);
+  const [myPosition, setMyPosition] = useState(null);
+  const [counts, setCounts] = useState({
+    support: Number(item.support_count) || 0,
+    oppose: Number(item.oppose_count) || 0,
+    neutral: Number(item.neutral_count) || 0,
+  });
 
-function YourOfficialsList({ cards, isRead, observe, onMarkRead }) {
-  // Group by official_name visually so a Randy Fine digest stays adjacent to
-  // Randy Fine cards.
-  const grouped = useMemo(() => {
-    const m = new Map();
-    cards.forEach((c) => {
-      const k = c.official_name || '__unknown__';
-      if (!m.has(k)) m.set(k, []);
-      m.get(k).push(c);
+  const summary = (item.plain_english_summary && item.plain_english_summary.trim())
+    || (item.description && item.description.trim())
+    || null;
+
+  const lvl = levelBadge(item.official_level);
+  const icon = activityIcon(item.activity_type, item.vote_position);
+  const when = relativeFromDate(item.date);
+
+  const handleVote = async (position) => {
+    if (pending) return;
+    setPending(true);
+    // Optimistic: bump count locally
+    setCounts((c) => {
+      const next = { ...c };
+      if (myPosition && next[myPosition] > 0) next[myPosition] -= 1;
+      next[position] = (next[position] || 0) + 1;
+      return next;
     });
-    return Array.from(m.entries());
-  }, [cards]);
-  if (grouped.length === 0) {
-    return <p className="fcv1-empty-hint">No recent activity from your officials.</p>;
-  }
+    setMyPosition(position);
+    const result = await onVote({
+      officialId: item.official_id,
+      feedCardId: item.id,
+      position,
+    });
+    setPending(false);
+    if (result && result.success && result.data) {
+      setCounts({
+        support: result.data.support_count || 0,
+        oppose: result.data.oppose_count || 0,
+        neutral: result.data.neutral_count || 0,
+      });
+    }
+  };
+
+  const totalVotes = counts.support + counts.oppose + counts.neutral;
+
   return (
-    <div className="fcv1-your-officials">
-      {grouped.map(([owner, list]) => (
-        <div key={owner} className="fcv1-yo-group">
-          <div className="fcv1-yo-owner">{owner}</div>
-          {list.map((c) => (
-            <FeedCard
-              key={c.id}
-              card={c}
-              isRead={isRead(c.id)}
-              observe={observe}
-              onMarkRead={onMarkRead}
-              compact
-            />
-          ))}
+    <article className="fcv1-stream-card">
+      <div className="fcv1-stream-top">
+        <span className="fcv1-card-icon" aria-hidden="true">{icon}</span>
+        <div className="fcv1-stream-title-block">
+          <div className="fcv1-stream-meta-top">
+            {lvl && (
+              <span className="fcv1-stream-level" style={{ color: lvl.color, borderColor: lvl.color + '66' }}>
+                {lvl.label}
+              </span>
+            )}
+            {item.bill_number && <span className="fcv1-stream-bill">{item.bill_number}</span>}
+            {item.vote_position && (
+              <span className="fcv1-stream-vote-pos">Voted {item.vote_position}</span>
+            )}
+          </div>
+          <h3 className="fcv1-stream-title">{item.title || '(untitled)'}</h3>
+          <div className="fcv1-stream-meta-bot">
+            {item.official_name && (
+              <span className="fcv1-stream-official">{item.official_name}</span>
+            )}
+            {when && <span className="fcv1-stream-time">· {when}</span>}
+            {item.status && <span className="fcv1-stream-status">· {item.status.replace(/_/g, ' ')}</span>}
+          </div>
         </div>
-      ))}
-    </div>
+      </div>
+
+      {summary && <p className="fcv1-stream-summary">{summary}</p>}
+
+      <div className="fcv1-stream-vote-row">
+        <button
+          className={`fcv1-vote-btn fcv1-vote-support ${myPosition === 'support' ? 'is-active' : ''}`}
+          onClick={() => handleVote('support')}
+          disabled={pending}
+        >
+          👍 Support {counts.support > 0 && <span className="fcv1-vote-count">{counts.support}</span>}
+        </button>
+        <button
+          className={`fcv1-vote-btn fcv1-vote-oppose ${myPosition === 'oppose' ? 'is-active' : ''}`}
+          onClick={() => handleVote('oppose')}
+          disabled={pending}
+        >
+          👎 Oppose {counts.oppose > 0 && <span className="fcv1-vote-count">{counts.oppose}</span>}
+        </button>
+        <button
+          className={`fcv1-vote-btn fcv1-vote-neutral ${myPosition === 'neutral' ? 'is-active' : ''}`}
+          onClick={() => handleVote('neutral')}
+          disabled={pending}
+        >
+          😐 Neutral {counts.neutral > 0 && <span className="fcv1-vote-count">{counts.neutral}</span>}
+        </button>
+        {totalVotes > 0 && (
+          <span className="fcv1-vote-total">{totalVotes} vote{totalVotes === 1 ? '' : 's'}</span>
+        )}
+      </div>
+
+      {(item.source_url || item.full_text_url || item.source) && (
+        <div className="fcv1-card-source">
+          {item.full_text_url && (
+            <a href={item.full_text_url} target="_blank" rel="noreferrer noopener">
+              Full text →
+            </a>
+          )}
+          {item.full_text_url && item.source_url && <span> · </span>}
+          {item.source_url ? (
+            <a href={item.source_url} target="_blank" rel="noreferrer noopener">
+              Source: {item.source || item.source_url}
+            </a>
+          ) : (
+            item.source && <span>Source: {item.source}</span>
+          )}
+        </div>
+      )}
+    </article>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Skeleton + error states
+// Skeleton + error
 // ---------------------------------------------------------------------------
 
 function FeedSkeleton() {
   return (
     <div className="fcv1-skeleton">
-      <div className="fcv1-skel-brief" />
       <div className="fcv1-skel-row">
         <div className="fcv1-skel-card" />
         <div className="fcv1-skel-card" />
@@ -292,161 +220,120 @@ function FeedSkeleton() {
   );
 }
 
-function FeedError({ onRetry }) {
+function FeedError({ onRetry, msg }) {
   return (
     <div className="fcv1-error">
-      <p>Could not load feed.</p>
+      <p>{msg || 'Could not load feed.'}</p>
       <button onClick={onRetry} className="fcv1-error-btn">Tap to retry</button>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Top-level component
+// Top-level component — single chronological stream with infinite scroll
 // ---------------------------------------------------------------------------
 
 export default function FeedV1({ zip, userName }) {
-  const { data, loading, error, lastVisitAtLoad, reload } = useFeedV1(zip);
   const streak = useStreak();
-  const { isRead, markRead, observe } = useReadTracker();
-  // Force a re-render once dwell timers may have fired so badges hide naturally.
-  const [, setTick] = useState(0);
+  const [items, setItems] = useState([]);
+  const [nextOffset, setNextOffset] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState(null);
+  const [lastVisitAtLoad, setLastVisitAtLoad] = useState(null);
+  const [reloadTick, setReloadTick] = useState(0);
+
+  // First page
   useEffect(() => {
-    const id = setInterval(() => setTick((n) => n + 1), 5000);
-    return () => clearInterval(id);
+    if (!zip) return;
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    setItems([]);
+    setNextOffset(null);
+    try { setLastVisitAtLoad(localStorage.getItem(LAST_VISIT_KEY) || null); } catch (_) {}
+
+    fetchFeedStream(zip, { limit: PAGE_SIZE, offset: 0 })
+      .then((res) => {
+        if (cancelled) return;
+        if (!res.success || !res.data) {
+          setError(res.error || 'Could not load feed.');
+          return;
+        }
+        setItems(res.data.items || []);
+        setNextOffset(res.data.next_offset);
+        try { localStorage.setItem(LAST_VISIT_KEY, new Date().toISOString()); } catch (_) {}
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [zip, reloadTick]);
+
+  const loadMore = useCallback(() => {
+    if (!zip || loadingMore || nextOffset == null) return;
+    setLoadingMore(true);
+    fetchFeedStream(zip, { limit: PAGE_SIZE, offset: nextOffset })
+      .then((res) => {
+        if (!res.success || !res.data) return;
+        setItems((prev) => [...prev, ...(res.data.items || [])]);
+        setNextOffset(res.data.next_offset);
+      })
+      .finally(() => setLoadingMore(false));
+  }, [zip, loadingMore, nextOffset]);
+
+  const onVote = useCallback(async ({ officialId, feedCardId, position }) => {
+    return await postConstituentVote({ officialId, feedCardId, position });
   }, []);
 
   if (loading) {
     return (
       <div className="tab-content fcv1-root">
+        <WelcomeBack userName={userName} lastVisitIso={lastVisitAtLoad} streak={streak} />
         <FeedSkeleton />
       </div>
     );
   }
-  if (error || !data) {
+  if (error) {
     return (
       <div className="tab-content fcv1-root">
-        <FeedError onRetry={reload} />
+        <FeedError onRetry={() => setReloadTick((n) => n + 1)} msg={error} />
       </div>
     );
   }
 
-  const showSinceLastVisit =
-    lastVisitAtLoad &&
-    Date.now() - new Date(lastVisitAtLoad).getTime() > HOURS_24_MS &&
-    data.sinceLastVisit.length > 0;
-
-  // Quiet-day fallback: when no daily local brief is published, surface the
-  // most recent federal card we already have so the section isn't a dead end.
-  const briefFallback =
-    !data.today?.brief
-      ? (data.thisWeek.find((c) => c.official_level === 'federal') ||
-         data.yourOfficials.find((c) => c.official_level === 'federal') ||
-         null)
-      : null;
-
   return (
     <div className="tab-content fcv1-root">
-      <WelcomeBack
-        userName={userName}
-        lastVisitIso={lastVisitAtLoad}
-        sinceCount={data.sinceLastVisit.length}
-        yourOfficialsCount={data.yourOfficials.filter((c) => c.is_new || c.is_updated).length}
-        streak={streak}
-      />
+      <WelcomeBack userName={userName} lastVisitIso={lastVisitAtLoad} streak={streak} />
 
-      {/* Today's Brief — always rendered (federal fallback if no local brief, evergreen if neither) */}
-      <BriefCard
-        card={data.today?.brief}
-        fallbackCard={briefFallback}
-        isRead={
-          data.today?.brief
-            ? isRead(data.today.brief.id)
-            : briefFallback ? isRead(briefFallback.id) : false
-        }
-        observe={observe}
-        onMarkRead={markRead}
-      />
-
-      {/* Since Last Visit */}
-      {showSinceLastVisit && (
-        <section className="fcv1-section">
-          <h2 className="fcv1-section-title">
-            {data.sinceLastVisit.length} update{data.sinceLastVisit.length === 1 ? '' : 's'} since you last visited
-          </h2>
-          <ExpandableList
-            items={data.sinceLastVisit}
-            initial={5}
-            expandLabel={(n) => `Show all ${n + 5}`}
-            render={(c) => (
-              <FeedCard
-                key={c.id}
-                card={c}
-                isRead={isRead(c.id)}
-                observe={observe}
-                onMarkRead={markRead}
-                compact
-              />
-            )}
-          />
-        </section>
+      {items.length === 0 ? (
+        <div className="fcv1-empty-stream">
+          <p>No legislative activity yet for ZIP {zip}.</p>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-3)' }}>
+            We're tracking your federal, state, and local reps. Bills they introduce and votes they cast
+            will appear here as they happen.
+          </p>
+        </div>
+      ) : (
+        <div className="fcv1-stream-list">
+          {items.map((it) => (
+            <StreamCard key={it.id} item={it} onVote={onVote} />
+          ))}
+        </div>
       )}
 
-      {/* This Week */}
-      <section className="fcv1-section">
-        <h2 className="fcv1-section-title">This week in your district</h2>
-        <ExpandableList
-          items={data.thisWeek}
-          initial={8}
-          expandLabel={(n) => `Show ${n} more`}
-          emptyHint="Nothing new this week. Check back soon."
-          render={(c) => (
-            <FeedCard
-              key={c.id}
-              card={c}
-              isRead={isRead(c.id)}
-              observe={observe}
-              onMarkRead={markRead}
-            />
-          )}
-        />
-      </section>
-
-      {/* Your Officials */}
-      <section className="fcv1-section">
-        <h2 className="fcv1-section-title">Your officials' activity</h2>
-        <YourOfficialsList
-          cards={data.yourOfficials}
-          isRead={isRead}
-          observe={observe}
-          onMarkRead={markRead}
-        />
-      </section>
-
-      {/* Coming Up */}
-      <section className="fcv1-section">
-        <h2 className="fcv1-section-title">Coming up this week</h2>
-        {data.comingUp && data.comingUp.length > 0 ? (
-          data.comingUp.map((e) => <ComingUpItem key={e.id} event={e} />)
-        ) : (
-          <p className="fcv1-empty-hint">
-            Florida Legislature is out of session. Next regular session starts January 13, 2026.
-          </p>
-        )}
-      </section>
+      {nextOffset != null && items.length > 0 && (
+        <button
+          className="fcv1-loadmore-btn"
+          onClick={loadMore}
+          disabled={loadingMore}
+        >
+          {loadingMore ? 'Loading…' : 'Load more'}
+        </button>
+      )}
 
       <footer className="fcv1-footer">
         <div className="fcv1-footer-meta">
-          ZIP {data.zipCode}
-          {data.county && ` · ${data.county} County`}
-          {' · '}
-          {data.activeCardCount} active card{data.activeCardCount === 1 ? '' : 's'}
+          ZIP {zip} · {items.length} item{items.length === 1 ? '' : 's'} loaded
         </div>
-        {data.lastRefreshAt && (
-          <div className="fcv1-footer-refresh">
-            Refreshed {relativeFromIso(data.lastRefreshAt)}
-          </div>
-        )}
       </footer>
     </div>
   );
