@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import './App.css';
-import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip, fetchOfficialLegislation, fetchOfficialMetrics, fetchOfficialDonors, fetchOfficialFundersByIndustry, fetchOfficialSpending, fetchOfficialScorecard, fetchOfficialCommittees } from './services/api';
+import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip, fetchOfficialLegislation, fetchOfficialMetrics, fetchOfficialDonors, fetchOfficialFundersByIndustry, fetchOfficialSpending, fetchOfficialExpenditures, fetchOfficialScorecard, fetchOfficialCommittees } from './services/api';
 import FeedV1 from './feed/FeedV1';
 import Login from './Login';
 
@@ -6363,10 +6363,120 @@ function SpendingBreakdownSection({ spending, fmt, sectionHeader }) {
   );
 }
 
+// FEC schedule_b-derived expenditures view. Distinct from
+// SpendingBreakdownSection (which reads the older campaign_finance_spending
+// table). Renders nothing when /expenditures returned no data.
+function ExpendituresSection({ expenditures, fmt, sectionHeader }) {
+  if (!expenditures) return null;
+  const byCategoryRaw = expenditures.by_category || {};
+  const topPayees = Array.isArray(expenditures.top_payees) ? expenditures.top_payees : [];
+  const total = Number(expenditures.total_spent) || 0;
+  if (total <= 0 && topPayees.length === 0) return null;
+
+  const CATEGORY_LABELS = {
+    media: 'Media & Ads',
+    consulting: 'Consulting',
+    payroll: 'Payroll',
+    fundraising: 'Fundraising',
+    travel: 'Travel',
+    other: 'Other',
+  };
+  const CATEGORY_ORDER = ['media', 'consulting', 'payroll', 'fundraising', 'travel', 'other'];
+
+  const ranked = CATEGORY_ORDER
+    .map((k) => ({ key: k, label: CATEGORY_LABELS[k], amount: Number(byCategoryRaw[k]) || 0 }))
+    .filter((c) => c.amount > 0)
+    .sort((a, b) => b.amount - a.amount);
+
+  const segments = ranked.map((c, i) => ({
+    label: c.label,
+    value: c.amount,
+    color: SPENDING_PALETTE[i % SPENDING_PALETTE.length],
+  }));
+
+  const txns = expenditures.total_transactions;
+
+  return (
+    <>
+      <hr style={{border:'none', borderTop:'1px solid var(--border)', margin:'1.25rem 0 0.85rem'}} />
+      {sectionHeader('Where the money was spent (FEC filings)')}
+
+      {total > 0 && (
+        <div style={{display:'flex', alignItems:'baseline', gap:'0.5rem', marginBottom:'0.75rem', flexWrap:'wrap'}}>
+          <span style={{fontSize:'1.6rem', fontWeight:800, color:'var(--text-1)', letterSpacing:'-0.02em'}}>
+            {fmt(total)}
+          </span>
+          <span style={{fontSize:'0.7rem', fontWeight:700, color:'var(--muted)', textTransform:'uppercase', letterSpacing:'0.05em'}}>
+            total disbursed
+          </span>
+          {txns ? (
+            <span style={{fontSize:'0.7rem', color:'var(--muted)', marginLeft:'auto'}}>
+              across {txns.toLocaleString()} transactions
+            </span>
+          ) : null}
+        </div>
+      )}
+
+      {ranked.length > 0 && (
+        <>
+          <StackedBar segments={segments} paletteFallback={SPENDING_PALETTE} />
+          <div style={{display:'flex', flexDirection:'column', gap:'0.35rem', marginTop:'0.75rem'}}>
+            {ranked.map((c, i) => {
+              const pct = total > 0 ? (c.amount / total) * 100 : 0;
+              return (
+                <div key={c.key} style={{display:'flex', alignItems:'center', gap:'0.55rem', fontSize:'0.78rem'}}>
+                  <span style={{width:'0.65rem', height:'0.65rem', borderRadius:'999px', background:SPENDING_PALETTE[i % SPENDING_PALETTE.length], flexShrink:0}} />
+                  <span style={{fontWeight:700, color:'var(--text-1)', minWidth:'7rem'}}>{c.label}</span>
+                  <span style={{flex:1, color:'var(--text-2)'}}>{fmt(c.amount)}</span>
+                  <span style={{fontWeight:700, color:'var(--muted)', minWidth:'3rem', textAlign:'right'}}>
+                    {pct.toFixed(1)}%
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {topPayees.length > 0 && (
+        <div style={{marginTop:'1rem'}}>
+          <div style={{fontSize:'0.7rem', fontWeight:800, color:'var(--muted)', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'0.45rem'}}>
+            Top payees
+          </div>
+          <div style={{display:'flex', flexDirection:'column', gap:'0.4rem'}}>
+            {topPayees.slice(0, 10).map((p, i) => (
+              <div key={i} style={{
+                display:'flex',
+                alignItems:'center',
+                gap:'0.6rem',
+                padding:'0.6rem 0.75rem',
+                background:'var(--card)',
+                border:'1px solid var(--border)',
+                borderRadius:'0.65rem',
+              }}>
+                <span style={{fontSize:'0.7rem', fontWeight:700, color:'var(--muted)', minWidth:'1.5rem'}}>
+                  #{i + 1}
+                </span>
+                <span style={{flex:1, minWidth:0, fontSize:'0.8rem', fontWeight:700, color:'var(--text-1)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
+                  {p.name}
+                </span>
+                <span style={{fontSize:'0.85rem', fontWeight:800, color:'var(--accent)', whiteSpace:'nowrap'}}>
+                  {fmt(p.amount)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function ContributorsTab({ official }) {
   const [donors, setDonors] = useState(null);
   const [industries, setIndustries] = useState([]);
   const [spending, setSpending] = useState(null);
+  const [expenditures, setExpenditures] = useState(null);
   const [expandedIndustries, setExpandedIndustries] = useState(() => new Set());
   const [donorsExpanded, setDonorsExpanded] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -6380,12 +6490,14 @@ function ContributorsTab({ official }) {
       fetchOfficialDonors(official.id),
       fetchOfficialFundersByIndustry(official.id),
       fetchOfficialSpending(official.id),
+      fetchOfficialExpenditures(official.id),
     ])
-      .then(([donorsResult, industriesResult, spendingResult]) => {
+      .then(([donorsResult, industriesResult, spendingResult, expendituresResult]) => {
         if (cancelled) return;
         setDonors(donorsResult.data);
         setIndustries(Array.isArray(industriesResult.items) ? industriesResult.items : []);
         setSpending(spendingResult.data);
+        setExpenditures(expendituresResult.data);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -6659,6 +6771,9 @@ function ContributorsTab({ official }) {
 
       {/* Where the Money Goes */}
       <SpendingBreakdownSection spending={spending} fmt={fmt} sectionHeader={sectionHeader} />
+
+      {/* FEC schedule_b expenditures (renders only when /expenditures has data) */}
+      <ExpendituresSection expenditures={expenditures} fmt={fmt} sectionHeader={sectionHeader} />
 
       {/* Footer */}
       <div style={{marginTop:'1.25rem', paddingTop:'0.85rem', borderTop:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'0.5rem'}}>
