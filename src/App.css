@@ -3571,3 +3571,10 @@ button { cursor: pointer; font-family: 'Sora', sans-serif; border: none; backgro
   font-size: 0.88rem; font-weight: 800; color: var(--text);
 }
 
+
+/* Loading-spinner keyframes used by Bills/Committees expandable cards */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+

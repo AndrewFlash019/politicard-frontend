@@ -482,3 +482,34 @@ export async function fetchOfficialCommittees(officialId) {
   }
 }
 
+// ─── Civic engagement (level + total votes) for a user_id ───────────────────
+export async function fetchUserEngagement(userId) {
+  try {
+    const r = await fetch(`${BASE_URL}/users/${encodeURIComponent(userId)}/engagement`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!r.ok) throw new Error(`Backend returned ${r.status}`);
+    return { success: true, data: await r.json() };
+  } catch (err) {
+    console.error('PolitiCard engagement error:', err);
+    return { success: false, data: null };
+  }
+}
+
+// ─── Per-official alignment for a user_id ───────────────────────────────────
+export async function fetchOfficialAlignment(officialId, userId) {
+  try {
+    const url = `${BASE_URL}/officials/${officialId}/alignment?user_id=${encodeURIComponent(userId)}`;
+    const r = await fetch(url, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!r.ok) throw new Error(`Backend returned ${r.status}`);
+    return { success: true, data: await r.json() };
+  } catch (err) {
+    console.error('PolitiCard alignment error:', err);
+    return { success: false, data: null };
+  }
+}
+
