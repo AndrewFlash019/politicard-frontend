@@ -1,12 +1,82 @@
 import React, { useState, useRef } from 'react';
 import './App.css';
-import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip, fetchOfficialLegislation, fetchOfficialMetrics, fetchOfficialDonors, fetchOfficialFundersByIndustry, fetchOfficialSpending, fetchOfficialExpenditures, fetchOfficialScorecard, fetchOfficialCommittees } from './services/api';
+import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip, fetchOfficialLegislation, fetchOfficialMetrics, fetchOfficialDonors, fetchOfficialFundersByIndustry, fetchOfficialSpending, fetchOfficialExpenditures, fetchOfficialScorecard, fetchOfficialCommittees, fetchUserEngagement, fetchOfficialAlignment } from './services/api';
 import FeedV1 from './feed/FeedV1';
 import Login from './Login';
 
 // Backend IDs are numeric. Frontend-only mocks use 'mock-*' string IDs which
 // must never be sent to /officials/<id>/* endpoints.
 const isFetchableId = (id) => typeof id === 'number' || (typeof id === 'string' && /^\d+$/.test(id));
+
+// Compact dollar formatting: $45B / $5M / $1.2K / $850 / —
+function formatMoney(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return '—';
+  const abs = Math.abs(v);
+  const sign = v < 0 ? '-' : '';
+  if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(abs >= 1e10 ? 0 : 1)}B`;
+  if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(abs >= 1e7 ? 0 : 1)}M`;
+  if (abs >= 1e3) return `${sign}$${(abs / 1e3).toFixed(abs >= 1e4 ? 0 : 1)}K`;
+  return `${sign}$${Math.round(abs).toLocaleString()}`;
+}
+
+// Vote tally: "48 Yea / 50 Nay" (skips zero sides). For aggregate constituent
+// counts, omit the labels: pass an `unlabeled: true` opt.
+function formatVoteTally(yea, nay, opts = {}) {
+  const a = Number(yea) || 0;
+  const b = Number(nay) || 0;
+  const yLbl = opts.unlabeled ? '' : ' Yea';
+  const nLbl = opts.unlabeled ? '' : ' Nay';
+  if (a && b) return `${a}${yLbl} / ${b}${nLbl}`;
+  if (a) return `${a}${yLbl}`;
+  if (b) return `${b}${nLbl}`;
+  return '—';
+}
+
+// Find inline "X v. Y" case names (with optional date) and turn them into
+// CourtListener search links. Returns a React fragment so the caller can
+// render mixed text + anchors safely.
+function linkifyCaseNames(text) {
+  if (!text || typeof text !== 'string') return text;
+  // Matches "Smith v. Jones", "Smith v. Jones (2024-01-15)", "Smith vs. Jones"
+  const re = /([A-Z][A-Za-z'\-.]+(?:\s+[A-Z][A-Za-z'\-.]+){0,3})\s+v(?:s)?\.\s+([A-Z][A-Za-z'\-.]+(?:\s+[A-Z][A-Za-z'\-.]+){0,3})(?:\s+\((\d{4}-\d{2}-\d{2})\))?/g;
+  const parts = [];
+  let last = 0;
+  let m;
+  let key = 0;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) parts.push(text.slice(last, m.index));
+    const caseName = `${m[1]} v. ${m[2]}${m[3] ? ` (${m[3]})` : ''}`;
+    const url = `https://www.courtlistener.com/?q=${encodeURIComponent(`${m[1]} v. ${m[2]}`)}&type=r`;
+    parts.push(
+      <a key={`cl-${key++}`} href={url} target="_blank" rel="noreferrer noopener" style={{color:'var(--accent)', fontWeight:600, textDecoration:'underline'}}>
+        {caseName}
+      </a>
+    );
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts.length === 1 && typeof parts[0] === 'string' ? text : <>{parts}</>;
+}
+
+// Stable per-device anonymous user_id. Mirrors the value api.js sends with
+// every constituent vote; so /users/{id}/engagement returns this device's
+// real total.
+function getAnonUserId() {
+  try {
+    let stored = localStorage.getItem('politicard_anon_uid');
+    if (!stored) {
+      stored = 'anon-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+      localStorage.setItem('politicard_anon_uid', stored);
+    }
+    // Legacy key name some specs reference; keep the two in sync so future
+    // "politiscore_user_id" callers see the same value.
+    try { localStorage.setItem('politiscore_user_id', stored); } catch (_) {}
+    return stored;
+  } catch (_) {
+    return 'anon-volatile';
+  }
+}
 
 // ─── LOGO COMPONENTS ──────────────────────────────────────────────────────────
 
@@ -947,14 +1017,17 @@ function roleDescription(title) {
 }
 
 // True when a bio is an auto-generated placeholder we should override
-// with a role description.
+// with a role description. Catches both "X serves as an elected official."
+// and "X serves as <office>." templates produced by api.js mapOfficial.
 function isPlaceholderBio(bio, name) {
   if (!bio) return true;
   const trimmed = bio.trim();
   if (!trimmed) return true;
-  if (name && trimmed === `${name} serves as an elected official.`) return true;
-  if (/^[A-Z][a-z]+\s+[A-Z][a-z]+\s+serves as an? elected official\.?$/.test(trimmed)) return true;
-  if (trimmed.endsWith(' serves as an elected official.')) return true;
+  // Short single-sentence bio ending with "serves as Y." is the api.js
+  // template — replace it with a richer role description when we have one.
+  if (trimmed.length <= 220 && /\bserves as (an?\s+)?[A-Za-z][^.]{0,80}\.?\s*$/.test(trimmed)) {
+    return true;
+  }
   return false;
 }
 
@@ -4439,15 +4512,29 @@ function MyProfileTab({ zip, userName, userPhoto, onPhotoChange, postsRead, like
   // ── Civic Engagement Badge ────────────────────────────────────────────────
   const CIVIC_BADGES = [
     { min: 0,  max: 0,  icon: '🌱', label: 'New Voter',      color: '#64748b', desc: 'Just getting started. Cast your first poll vote to level up.' },
-    { min: 1,  max: 2,  icon: '🗳️', label: 'Poll Voter',     color: '#0891b2', desc: 'You\'re weighing in on how your reps vote. Keep going.' },
-    { min: 3,  max: 5,  icon: '📣', label: 'Civic Voice',    color: '#7c3aed', desc: 'You\'ve voted on 3+ polls. Your opinions are being counted.' },
-    { min: 6,  max: 9,  icon: '🏛️', label: 'Active Citizen', color: '#d97706', desc: 'Consistently engaged. You know what your reps are doing.' },
-    { min: 10, max: 14, icon: '⚡', label: 'Civic Champion', color: '#16a34a', desc: 'Top-tier engagement. You\'re more informed than most voters.' },
-    { min: 15, max: Infinity, icon: '🦅', label: 'Democracy Defender', color: '#dc2626', desc: 'Elite civic participation. You set the standard.' },
+    { min: 1,  max: 4,  icon: '🗳️', label: 'Poll Voter',     color: '#0891b2', desc: 'You\'re weighing in on how your reps vote. Keep going.' },
+    { min: 5,  max: 7,  icon: '📣', label: 'Civic Voice',    color: '#7c3aed', desc: 'You\'ve voted on 5+ polls. Your opinions are being counted.' },
+    { min: 8,  max: 9,  icon: '🏛️', label: 'Active Citizen', color: '#d97706', desc: 'Consistently engaged. You know what your reps are doing.' },
+    { min: 10, max: 14, icon: '🏆', label: 'Civic Champion', color: '#16a34a', desc: 'Top-tier engagement. You\'re more informed than most voters.' },
+    { min: 15, max: Infinity, icon: '🛡️', label: 'Democracy Defender', color: '#dc2626', desc: 'Elite civic participation. You set the standard.' },
   ];
-  const badge = CIVIC_BADGES.slice().reverse().find(b => pollVotesCount >= b.min) || CIVIC_BADGES[0];
-  const nextBadge = CIVIC_BADGES.find(b => b.min > pollVotesCount);
-  const progressToNext = nextBadge ? Math.min(100, ((pollVotesCount - badge.min) / (nextBadge.min - badge.min)) * 100) : 100;
+  // Pull the real backend total from /users/{id}/engagement and prefer it over
+  // the in-memory pollVotesCount (which only counts this session's votes).
+  const [engagement, setEngagement] = useState(null);
+  React.useEffect(() => {
+    let cancelled = false;
+    fetchUserEngagement(getAnonUserId()).then((res) => {
+      if (cancelled) return;
+      if (res && res.success && res.data) setEngagement(res.data);
+    });
+    return () => { cancelled = true; };
+  }, []);
+  const effectiveCount = engagement && typeof engagement.total_votes === 'number'
+    ? engagement.total_votes
+    : pollVotesCount;
+  const badge = CIVIC_BADGES.slice().reverse().find(b => effectiveCount >= b.min) || CIVIC_BADGES[0];
+  const nextBadge = CIVIC_BADGES.find(b => b.min > effectiveCount);
+  const progressToNext = nextBadge ? Math.min(100, ((effectiveCount - badge.min) / (nextBadge.min - badge.min)) * 100) : 100;
 
   const handleFile = (e) => {
     const file = e.target.files[0];
@@ -4586,7 +4673,7 @@ function MyProfileTab({ zip, userName, userPhoto, onPhotoChange, postsRead, like
             <div className="civic-badge-title" style={{ color: badge.color }}>{badge.label}</div>
           </div>
           <div className="civic-badge-count-wrap">
-            <span className="civic-badge-count" style={{ color: badge.color }}>{pollVotesCount}</span>
+            <span className="civic-badge-count" style={{ color: badge.color }}>{effectiveCount}</span>
             <span className="civic-badge-count-sub">polls voted</span>
           </div>
         </div>
@@ -4600,7 +4687,7 @@ function MyProfileTab({ zip, userName, userPhoto, onPhotoChange, postsRead, like
               <div className="civic-badge-progress-fill" style={{ width: progressToNext + '%', background: badge.color }} />
             </div>
             <div className="civic-badge-progress-label">
-              <span>{pollVotesCount} voted</span>
+              <span>{effectiveCount} voted</span>
               <span>{nextBadge.icon} {nextBadge.label} at {nextBadge.min}</span>
             </div>
           </div>
@@ -4611,7 +4698,7 @@ function MyProfileTab({ zip, userName, userPhoto, onPhotoChange, postsRead, like
         {/* Badge ladder — all levels */}
         <div className="civic-badge-ladder">
           {CIVIC_BADGES.map((b, i) => {
-            const earned = pollVotesCount >= b.min;
+            const earned = effectiveCount >= b.min;
             const isCurrent = badge.label === b.label;
             return (
               <div key={i} className={`civic-ladder-step ${earned ? 'civic-ladder-earned' : ''} ${isCurrent ? 'civic-ladder-current' : ''}`}>
@@ -6038,7 +6125,7 @@ function SheriffMetricsPanel({ official }) {
                 <div className="sheriff-lawsuit-left">
                   <span className="sheriff-lawsuit-year">{l.year}</span>
                   <div className="sheriff-lawsuit-info">
-                    <span className="sheriff-lawsuit-case">{l.case}</span>
+                    <span className="sheriff-lawsuit-case">{linkifyCaseNames(l.case)}</span>
                     <span className="sheriff-lawsuit-cat">{l.category}</span>
                   </div>
                 </div>
@@ -6053,7 +6140,7 @@ function SheriffMetricsPanel({ official }) {
               {isOpen && (
                 <div className="sheriff-lawsuit-detail">
                   {l.caseNote && (
-                    <div className="sheriff-lawsuit-sample-note">⚠️ {l.caseNote}</div>
+                    <div className="sheriff-lawsuit-sample-note">⚠️ {linkifyCaseNames(l.caseNote)}</div>
                   )}
                   <div className="sheriff-lawsuit-links">
                     <a href={l.docketUrl} target="_blank" rel="noreferrer" className="sheriff-docket-link">
@@ -6105,11 +6192,11 @@ function SheriffMetricsPanel({ official }) {
 // ─── CONTRIBUTORS TAB ────────────────────────────────────────────────────────
 
 function fmtDonorCurrency(n) {
+  // Delegate to formatMoney so $B is also covered (Senate self-funders etc.).
+  // Preserves prior contract: 0/NaN -> '$0' for the donor-card layout.
   const num = Number(n);
   if (!Number.isFinite(num) || num === 0) return '$0';
-  if (num >= 1000000) return '$' + (num / 1000000).toFixed(1) + 'M';
-  if (num >= 1000) return '$' + Math.round(num / 1000) + 'K';
-  return '$' + Math.round(num).toLocaleString();
+  return formatMoney(num);
 }
 
 function fmtPercent(p) {
@@ -6904,8 +6991,8 @@ function MetricCard({ metric }) {
       </div>
 
       {isNoData ? (
-        <div style={{fontSize:'0.75rem', color:'#64748b', lineHeight:1.4}}>
-          Awaiting data ingestion from {sourceHint}.
+        <div style={{fontSize:'0.72rem', color:'#94a3b8', lineHeight:1.4, fontStyle:'italic'}}>
+          Data coming soon · Source: {sourceHint}
         </div>
       ) : (
         <>
@@ -7010,18 +7097,58 @@ function AccountabilityScorecardSection({ scorecard, loading }) {
         </div>
       )}
 
-      {/* Metric grid */}
-      <div style={{
-        marginTop:'0.6rem',
-        display:'grid',
-        gridTemplateColumns:'repeat(auto-fill, minmax(220px, 1fr))',
-        gap:'0.6rem',
-      }}>
-        {metrics.map((m, idx) => (
-          <MetricCard key={`${m.key}-${idx}`} metric={m} />
-        ))}
-      </div>
+      {/* Metric grid — split haveData (always visible) from no_data (collapsed) */}
+      <ScorecardMetricsGrid metrics={metrics} />
     </div>
+  );
+}
+
+function ScorecardMetricsGrid({ metrics }) {
+  const [expanded, setExpanded] = React.useState(false);
+  const haveData = metrics.filter(m => m.rating !== 'no_data');
+  const pending  = metrics.filter(m => m.rating === 'no_data');
+
+  return (
+    <>
+      {haveData.length > 0 && (
+        <div style={{
+          marginTop:'0.6rem',
+          display:'grid',
+          gridTemplateColumns:'repeat(auto-fill, minmax(220px, 1fr))',
+          gap:'0.6rem',
+        }}>
+          {haveData.map((m, idx) => (
+            <MetricCard key={`${m.key}-${idx}`} metric={m} />
+          ))}
+        </div>
+      )}
+
+      {pending.length > 0 && (
+        <div style={{marginTop:'0.6rem', padding:'0.6rem 0.8rem', background:'#f8fafc', border:'1px dashed #cbd5e1', borderRadius:'0.7rem'}}>
+          <button
+            onClick={() => setExpanded(v => !v)}
+            style={{background:'transparent', border:0, padding:0, cursor:'pointer', display:'flex', alignItems:'center', gap:'0.5rem', width:'100%', textAlign:'left'}}
+          >
+            <span style={{fontSize:'0.78rem', fontWeight:700, color:'#475569', flex:1}}>
+              {pending.length} metric{pending.length === 1 ? '' : 's'} pending · tap to see what's coming
+            </span>
+            <span style={{fontSize:'0.7rem', color:'var(--accent)', fontWeight:800}}>{expanded ? '▲' : '▼'}</span>
+          </button>
+          {expanded && (
+            <div style={{
+              marginTop:'0.55rem',
+              display:'grid',
+              gridTemplateColumns:'repeat(auto-fill, minmax(220px, 1fr))',
+              gap:'0.5rem',
+            }}>
+              {pending.map((m, idx) => (
+                <MetricCard key={`pend-${m.key}-${idx}`} metric={m} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -7044,9 +7171,25 @@ function lookupCommitteeMeta(code, fallbackTitle) {
   return { name: fallbackTitle || code || 'Committee', blurb: '' };
 }
 
+// Status → palette for color-coded bill badges
+function billStatusBadgeStyle(status) {
+  const s = (status || '').toLowerCase();
+  if (s.includes('enacted') || s.includes('passed') || s.includes('signed')) {
+    return { bg: '#dcfce7', fg: '#166534', border: '#16a34a' };
+  }
+  if (s.includes('failed') || s.includes('vetoed') || s.includes('withdrawn')) {
+    return { bg: '#fee2e2', fg: '#991b1b', border: '#dc2626' };
+  }
+  if (s.includes('committee')) {
+    return { bg: '#fef3c7', fg: '#92400e', border: '#d97706' };
+  }
+  return { bg: '#f1f5f9', fg: '#475569', border: '#cbd5e1' };
+}
+
 function BillsSponsoredCard({ officialId }) {
   const [items, setItems] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [showCount, setShowCount] = useState(10);
 
@@ -7057,10 +7200,15 @@ function BillsSponsoredCard({ officialId }) {
     }
     let cancelled = false;
     setLoading(true);
+    setError(false);
     fetchOfficialLegislation(officialId)
       .then((res) => {
         if (cancelled) return;
-        // Endpoint returns either an array or {items: []}; legacy clients used the wrapped form
+        if (!res || res.success === false) {
+          setError(true);
+          setItems([]);
+          return;
+        }
         const list = Array.isArray(res.items) ? res.items
           : Array.isArray(res?.data) ? res.data
           : Array.isArray(res) ? res : [];
@@ -7070,11 +7218,12 @@ function BillsSponsoredCard({ officialId }) {
     return () => { cancelled = true; };
   }, [officialId]);
 
-  if (loading) return null;
-  if (!items || items.length === 0) return null;
+  // Hide entirely while we don't yet know if there's data
+  if (loading && items === null) return null;
+  if (!loading && (!items || items.length === 0)) return null;
 
-  const visible = expanded ? items.slice(0, showCount) : [];
-  const remaining = Math.max(0, items.length - showCount);
+  const visible = expanded ? (items || []).slice(0, showCount) : [];
+  const remaining = Math.max(0, (items || []).length - showCount);
   const truncate = (s, n) => (s && s.length > n ? s.slice(0, n) + '…' : s);
 
   return (
@@ -7085,7 +7234,7 @@ function BillsSponsoredCard({ officialId }) {
             Bills Sponsored
           </div>
           <div style={{fontSize:'1.25rem', fontWeight:800, color:'#0f172a', marginTop:'0.15rem'}}>
-            {items.length}
+            {items ? items.length : '—'}
           </div>
         </div>
         <button
@@ -7097,35 +7246,65 @@ function BillsSponsoredCard({ officialId }) {
       </div>
 
       {expanded && (
-        <div style={{marginTop:'0.75rem', display:'flex', flexDirection:'column', gap:'0.5rem'}}>
-          {visible.map((b) => (
-            <div key={b.id} style={{padding:'0.6rem 0.75rem', border:'1px solid var(--border)', borderRadius:'0.6rem', display:'flex', flexDirection:'column', gap:'0.25rem'}}>
-              <div style={{display:'flex', alignItems:'center', gap:'0.5rem', flexWrap:'wrap'}}>
-                {b.bill_number && (
-                  <span style={{fontFamily:"'IBM Plex Mono', monospace, ui-monospace", fontSize:'0.72rem', fontWeight:700, color:'var(--accent)'}}>
-                    {b.bill_number}
-                  </span>
-                )}
-                {b.status && (
-                  <span style={{fontSize:'0.6rem', fontWeight:800, textTransform:'uppercase', letterSpacing:'0.05em', padding:'0.15rem 0.5rem', borderRadius:'999px', background:'#f1f5f9', color:'#475569'}}>
-                    {b.status.replace(/_/g, ' ')}
-                  </span>
-                )}
-                {b.date && (
-                  <span style={{fontSize:'0.7rem', color:'#94a3b8', marginLeft:'auto'}}>{b.date}</span>
-                )}
-              </div>
-              <div style={{fontSize:'0.85rem', fontWeight:600, color:'#0f172a'}}>
-                {truncate(b.title || '(untitled)', 80)}
-              </div>
-              {b.source_url && (
-                <a href={b.source_url} target="_blank" rel="noreferrer noopener" style={{fontSize:'0.72rem', fontWeight:700, color:'var(--accent)', textDecoration:'none', alignSelf:'flex-start'}}>
-                  View →
-                </a>
-              )}
+        <div style={{marginTop:'0.75rem', display:'flex', flexDirection:'column', gap:'0.5rem', maxHeight:'60vh', overflowY:'auto'}}>
+          {loading && (
+            <div style={{padding:'0.85rem', textAlign:'center', fontSize:'0.78rem', color:'var(--text-2)'}}>
+              <span style={{display:'inline-block', width:'1rem', height:'1rem', border:'2px solid var(--border)', borderTopColor:'var(--accent)', borderRadius:'50%', animation:'spin 0.8s linear infinite', verticalAlign:'middle', marginRight:'0.5rem'}} />
+              Loading bills…
             </div>
-          ))}
-          {remaining > 0 && (
+          )}
+          {error && !loading && (
+            <div style={{padding:'0.85rem', textAlign:'center', fontSize:'0.78rem', color:'var(--text-3)'}}>
+              Could not load bills.
+            </div>
+          )}
+          {!loading && visible.map((b) => {
+            const badge = billStatusBadgeStyle(b.status);
+            const summaryText = (b.plain_english_summary && b.plain_english_summary.trim())
+              || truncate(b.title || '', 100)
+              || '(no summary)';
+            return (
+              <div key={b.id} style={{padding:'0.6rem 0.75rem', border:'1px solid var(--border)', borderRadius:'0.6rem', display:'flex', flexDirection:'column', gap:'0.3rem'}}>
+                <div style={{display:'flex', alignItems:'center', gap:'0.5rem', flexWrap:'wrap'}}>
+                  {b.bill_number && (
+                    <span style={{fontFamily:"'IBM Plex Mono', monospace, ui-monospace", fontSize:'0.72rem', fontWeight:700, color:'var(--accent)'}}>
+                      {b.bill_number}
+                    </span>
+                  )}
+                  {b.status && (
+                    <span style={{
+                      fontSize:'0.6rem', fontWeight:800, textTransform:'uppercase',
+                      letterSpacing:'0.05em', padding:'0.15rem 0.5rem', borderRadius:'999px',
+                      background: badge.bg, color: badge.fg, border: `1px solid ${badge.border}`,
+                    }}>
+                      {b.status.replace(/_/g, ' ')}
+                    </span>
+                  )}
+                  {b.date && (
+                    <span style={{fontSize:'0.7rem', color:'#94a3b8', marginLeft:'auto'}}>{b.date}</span>
+                  )}
+                </div>
+                <div style={{fontSize:'0.85rem', fontWeight:600, color:'#0f172a', lineHeight:1.4}}>
+                  {summaryText}
+                </div>
+                {(b.source_url || b.full_text_url) && (
+                  <div style={{display:'flex', gap:'0.85rem', alignSelf:'flex-start'}}>
+                    {b.source_url && (
+                      <a href={b.source_url} target="_blank" rel="noreferrer noopener" style={{fontSize:'0.72rem', fontWeight:700, color:'var(--accent)', textDecoration:'none'}}>
+                        View →
+                      </a>
+                    )}
+                    {b.full_text_url && (
+                      <a href={b.full_text_url} target="_blank" rel="noreferrer noopener" style={{fontSize:'0.72rem', fontWeight:700, color:'var(--accent)', textDecoration:'none'}}>
+                        Full text →
+                      </a>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {!loading && remaining > 0 && (
             <button
               onClick={() => setShowCount(c => c + 10)}
               style={{alignSelf:'center', marginTop:'0.5rem', background:'var(--surface)', border:'1px solid var(--border)', color:'var(--accent)', fontWeight:700, fontSize:'0.78rem', padding:'0.5rem 1rem', borderRadius:'10px', cursor:'pointer'}}
@@ -7142,6 +7321,7 @@ function BillsSponsoredCard({ officialId }) {
 function CommitteeAssignmentsCard({ officialId }) {
   const [items, setItems] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
   React.useEffect(() => {
@@ -7151,24 +7331,89 @@ function CommitteeAssignmentsCard({ officialId }) {
     }
     let cancelled = false;
     setLoading(true);
+    setError(false);
     fetchOfficialCommittees(officialId).then((res) => {
       if (cancelled) return;
+      if (!res || res.success === false) { setError(true); setItems([]); return; }
       setItems(res.items || []);
     }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [officialId]);
 
-  if (loading) return null;
-  if (!items || items.length === 0) return null;
+  if (loading && items === null) return null;
+  if (!loading && (!items || items.length === 0)) return null;
 
-  // Dedupe by bill_number (committee code)
+  // Dedupe by committee code, then group subcommittees under their parent
+  // (Senate ingestion uses parent-prefix codes, e.g. SSAS13 belongs under SSAS).
   const seen = new Set();
-  const unique = items.filter((c) => {
+  const unique = (items || []).filter((c) => {
     const k = c.bill_number || c.title;
     if (seen.has(k)) return false;
     seen.add(k);
     return true;
   });
+
+  const parents = unique.filter((c) => {
+    const code = c.bill_number || '';
+    return code.length <= 4; // SSAS, SSFR, SPAG, etc.
+  });
+  const orphans = unique.filter((c) => {
+    const code = c.bill_number || '';
+    if (code.length <= 4) return false;
+    const parentCode = code.slice(0, 4);
+    return !parents.some((p) => (p.bill_number || '') === parentCode);
+  });
+  // Subs grouped by their parent code
+  const subsByParent = {};
+  unique.forEach((c) => {
+    const code = c.bill_number || '';
+    if (code.length > 4) {
+      const parentCode = code.slice(0, 4);
+      if (parents.some((p) => (p.bill_number || '') === parentCode)) {
+        (subsByParent[parentCode] = subsByParent[parentCode] || []).push(c);
+      }
+    }
+  });
+
+  const renderRow = (c, indented = false) => {
+    const meta = lookupCommitteeMeta(c.bill_number, c.title);
+    return (
+      <div key={c.bill_number || c.title} style={{
+        padding:'0.65rem 0.75rem',
+        marginLeft: indented ? '1.25rem' : 0,
+        border:'1px solid var(--border)',
+        borderLeft: indented ? '3px solid var(--accent)' : '1px solid var(--border)',
+        borderRadius:'0.6rem',
+        background: indented ? '#fafbff' : '#ffffff',
+      }}>
+        <div style={{display:'flex', alignItems:'baseline', gap:'0.5rem', flexWrap:'wrap'}}>
+          {c.bill_number && (
+            <span style={{fontFamily:"'IBM Plex Mono', monospace, ui-monospace", fontSize:'0.7rem', fontWeight:700, color:'var(--accent)'}}>
+              {c.bill_number}
+            </span>
+          )}
+          <span style={{fontSize:'0.85rem', fontWeight:700, color:'#0f172a'}}>
+            {meta.name}
+          </span>
+        </div>
+        {meta.blurb && (
+          <p style={{margin:'0.3rem 0 0', fontSize:'0.78rem', color:'var(--text-2)', lineHeight:1.45}}>
+            {meta.blurb}
+          </p>
+        )}
+        {c.description && c.description !== meta.blurb && (
+          <p style={{margin:'0.25rem 0 0', fontSize:'0.74rem', color:'var(--text-3)', fontStyle:'italic'}}>
+            {c.description}
+          </p>
+        )}
+        {c.source_url && (
+          <a href={c.source_url} target="_blank" rel="noreferrer noopener" style={{fontSize:'0.72rem', fontWeight:700, color:'var(--accent)', textDecoration:'none', display:'inline-block', marginTop:'0.35rem'}}>
+            View →
+          </a>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div style={{margin:'0.75rem 1rem', padding:'0.95rem 1rem', background:'#ffffff', border:'1px solid var(--border)', borderRadius:'0.85rem'}}>
@@ -7191,40 +7436,97 @@ function CommitteeAssignmentsCard({ officialId }) {
 
       {expanded && (
         <div style={{marginTop:'0.75rem', display:'flex', flexDirection:'column', gap:'0.5rem'}}>
-          {unique.map((c, i) => {
-            const meta = lookupCommitteeMeta(c.bill_number, c.title);
-            return (
-              <div key={i} style={{padding:'0.65rem 0.75rem', border:'1px solid var(--border)', borderRadius:'0.6rem'}}>
-                <div style={{display:'flex', alignItems:'baseline', gap:'0.5rem', flexWrap:'wrap'}}>
-                  {c.bill_number && (
-                    <span style={{fontFamily:"'IBM Plex Mono', monospace, ui-monospace", fontSize:'0.7rem', fontWeight:700, color:'var(--accent)'}}>
-                      {c.bill_number}
-                    </span>
-                  )}
-                  <span style={{fontSize:'0.85rem', fontWeight:700, color:'#0f172a'}}>
-                    {meta.name}
-                  </span>
-                </div>
-                {meta.blurb && (
-                  <p style={{margin:'0.3rem 0 0', fontSize:'0.78rem', color:'var(--text-2)', lineHeight:1.45}}>
-                    {meta.blurb}
-                  </p>
-                )}
-                {c.description && c.description !== meta.blurb && (
-                  <p style={{margin:'0.25rem 0 0', fontSize:'0.74rem', color:'var(--text-3)', fontStyle:'italic'}}>
-                    {c.description}
-                  </p>
-                )}
-                {c.source_url && (
-                  <a href={c.source_url} target="_blank" rel="noreferrer noopener" style={{fontSize:'0.72rem', fontWeight:700, color:'var(--accent)', textDecoration:'none', display:'inline-block', marginTop:'0.35rem'}}>
-                    View →
-                  </a>
-                )}
-              </div>
-            );
-          })}
+          {loading && (
+            <div style={{padding:'0.85rem', textAlign:'center', fontSize:'0.78rem', color:'var(--text-2)'}}>
+              <span style={{display:'inline-block', width:'1rem', height:'1rem', border:'2px solid var(--border)', borderTopColor:'var(--accent)', borderRadius:'50%', animation:'spin 0.8s linear infinite', verticalAlign:'middle', marginRight:'0.5rem'}} />
+              Loading committees…
+            </div>
+          )}
+          {error && !loading && (
+            <div style={{padding:'0.85rem', textAlign:'center', fontSize:'0.78rem', color:'var(--text-3)'}}>
+              Could not load committees.
+            </div>
+          )}
+          {!loading && parents.map((p) => (
+            <React.Fragment key={p.bill_number || p.title}>
+              {renderRow(p)}
+              {(subsByParent[p.bill_number] || []).map((s) => renderRow(s, true))}
+            </React.Fragment>
+          ))}
+          {!loading && orphans.map((o) => renderRow(o))}
         </div>
       )}
+    </div>
+  );
+}
+
+// "Your Alignment" section — compares this device's constituent_votes to the
+// official's recorded vote_position. Renders nothing when there's no overlap
+// yet (new users), so the profile stays clean.
+function AlignmentSection({ officialId }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  React.useEffect(() => {
+    if (!officialId || (typeof officialId === 'string' && !/^\d+$/.test(officialId))) {
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    const uid = getAnonUserId();
+    fetchOfficialAlignment(officialId, uid).then((res) => {
+      if (cancelled) return;
+      setData(res && res.success ? res.data : null);
+    }).finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [officialId]);
+
+  if (loading || !data) return null;
+  const total = data.total_compared || 0;
+  if (total === 0) {
+    return (
+      <div style={{margin:'0.75rem 1rem', padding:'0.85rem 1rem', background:'#f8fafc', border:'1px dashed var(--border)', borderRadius:'0.85rem', fontSize:'0.78rem', color:'var(--text-3)'}}>
+        <span style={{fontWeight:800, color:'var(--text-2)'}}>Your Alignment · </span>
+        Vote on a few bills in the feed to see how often you agree with this official.
+      </div>
+    );
+  }
+
+  const agree = data.agree_count || 0;
+  const disagree = data.disagree_count || 0;
+  const pct = data.alignment_pct != null ? data.alignment_pct : Math.round((agree / Math.max(total, 1)) * 100);
+  const agreePct = total ? (agree / total) * 100 : 0;
+  const disagreePct = total ? (disagree / total) * 100 : 0;
+  const tone = pct >= 67 ? '#16a34a' : pct >= 34 ? '#d97706' : '#dc2626';
+
+  return (
+    <div style={{margin:'0.75rem 1rem', padding:'0.95rem 1rem', background:'#ffffff', border:'1px solid var(--border)', borderRadius:'0.85rem'}}>
+      <div style={{display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:'0.5rem'}}>
+        <div style={{fontSize:'0.62rem', fontWeight:800, color:'#475569', textTransform:'uppercase', letterSpacing:'0.07em'}}>
+          Your Alignment
+        </div>
+        <div style={{fontSize:'0.72rem', color:'var(--muted)'}}>
+          {total} vote{total === 1 ? '' : 's'} compared
+        </div>
+      </div>
+      <div style={{display:'flex', alignItems:'baseline', gap:'0.5rem', margin:'0.4rem 0 0.7rem'}}>
+        <span style={{fontSize:'1.7rem', fontWeight:800, color: tone, letterSpacing:'-0.02em'}}>{pct}%</span>
+        <span style={{fontSize:'0.78rem', color:'var(--text-2)'}}>agree</span>
+      </div>
+      <div style={{display:'flex', width:'100%', height:'14px', borderRadius:'999px', overflow:'hidden', background:'var(--border)'}}>
+        {agreePct > 0 && <div style={{width:`${agreePct}%`, background:'#16a34a'}} />}
+        {disagreePct > 0 && <div style={{width:`${disagreePct}%`, background:'#dc2626'}} />}
+      </div>
+      <div style={{display:'flex', justifyContent:'space-between', marginTop:'0.4rem', fontSize:'0.72rem', color:'var(--text-2)'}}>
+        <span title={`${agree} agreed of ${total} compared`}>
+          <span style={{color:'#16a34a', fontWeight:800}}>●</span> Agree {agree}
+        </span>
+        <span title="Yea-style tally" style={{color:'var(--muted)', fontFamily:"'IBM Plex Mono', ui-monospace, monospace"}}>
+          {formatVoteTally(agree, disagree, { unlabeled: true })}
+        </span>
+        <span><span style={{color:'#dc2626', fontWeight:800}}>●</span> Disagree {disagree}</span>
+      </div>
     </div>
   );
 }
@@ -7322,6 +7624,7 @@ function OfficialProfile({ official: o, onBack, likes, onLike, zip }) {
 
       <OfficialMetricsCard items={officialMetrics} />
 
+      <AlignmentSection officialId={o.id} />
       <BillsSponsoredCard officialId={o.id} />
       <CommitteeAssignmentsCard officialId={o.id} />
 

@@ -82,6 +82,30 @@ function WelcomeBack({ userName, lastVisitIso, streak }) {
 // Stream card — bills, votes, committees, local Legistar — one shape
 // ---------------------------------------------------------------------------
 
+// Plain-English headline. Vote rows: "Official voted YEA on summary".
+// Bill rows: "Official sponsored BILL: summary". Falls back to title.
+function buildPlainEnglishHeadline(item) {
+  const summary = (item.plain_english_summary && item.plain_english_summary.trim())
+    || (item.title && item.title.trim())
+    || '(no summary)';
+  const shortSummary = summary.length > 140 ? summary.slice(0, 140).trimEnd() + '…' : summary;
+  const who = item.official_name || 'Official';
+  if (item.activity_type === 'vote' && item.vote_position) {
+    const pos = item.vote_position.toLowerCase();
+    let display = item.vote_position.toUpperCase();
+    if (pos.startsWith('y')) display = 'YEA';
+    else if (pos.startsWith('n') && !pos.startsWith('not')) display = 'NAY';
+    return `${who} voted ${display} on ${shortSummary}`;
+  }
+  if (item.activity_type === 'bill_sponsored' || item.activity_type === 'bill_cosponsored') {
+    const verb = item.activity_type === 'bill_cosponsored' ? 'cosponsored' : 'sponsored';
+    return item.bill_number
+      ? `${who} ${verb} ${item.bill_number}: ${shortSummary}`
+      : `${who} ${verb}: ${shortSummary}`;
+  }
+  return summary;
+}
+
 function StreamCard({ item, onVote }) {
   const [pending, setPending] = useState(false);
   const [myPosition, setMyPosition] = useState(null);
@@ -91,18 +115,21 @@ function StreamCard({ item, onVote }) {
     neutral: Number(item.neutral_count) || 0,
   });
 
-  const summary = (item.plain_english_summary && item.plain_english_summary.trim())
-    || (item.description && item.description.trim())
-    || null;
+  const headline = buildPlainEnglishHeadline(item);
+  const desc = (item.description && item.description.trim()) || '';
+  const supportingDetail =
+    desc && desc !== (item.plain_english_summary || '').trim() && desc !== (item.title || '').trim()
+      ? desc : null;
 
   const lvl = levelBadge(item.official_level);
   const icon = activityIcon(item.activity_type, item.vote_position);
   const when = relativeFromDate(item.date);
+  const linkUrl = item.full_text_url || item.source_url || null;
 
-  const handleVote = async (position) => {
+  const handleVote = async (e, position) => {
+    if (e && e.stopPropagation) e.stopPropagation();
     if (pending) return;
     setPending(true);
-    // Optimistic: bump count locally
     setCounts((c) => {
       const next = { ...c };
       if (myPosition && next[myPosition] > 0) next[myPosition] -= 1;
@@ -125,10 +152,20 @@ function StreamCard({ item, onVote }) {
     }
   };
 
+  const handleCardClick = () => {
+    if (linkUrl) window.open(linkUrl, '_blank', 'noopener,noreferrer');
+  };
+
   const totalVotes = counts.support + counts.oppose + counts.neutral;
 
   return (
-    <article className="fcv1-stream-card">
+    <article
+      className="fcv1-stream-card"
+      onClick={handleCardClick}
+      style={linkUrl ? { cursor: 'pointer' } : undefined}
+      role={linkUrl ? 'link' : undefined}
+      tabIndex={linkUrl ? 0 : undefined}
+    >
       <div className="fcv1-stream-top">
         <span className="fcv1-card-icon" aria-hidden="true">{icon}</span>
         <div className="fcv1-stream-title-block">
@@ -139,41 +176,35 @@ function StreamCard({ item, onVote }) {
               </span>
             )}
             {item.bill_number && <span className="fcv1-stream-bill">{item.bill_number}</span>}
-            {item.vote_position && (
-              <span className="fcv1-stream-vote-pos">Voted {item.vote_position}</span>
-            )}
           </div>
-          <h3 className="fcv1-stream-title">{item.title || '(untitled)'}</h3>
+          <h3 className="fcv1-stream-title">{headline}</h3>
           <div className="fcv1-stream-meta-bot">
-            {item.official_name && (
-              <span className="fcv1-stream-official">{item.official_name}</span>
-            )}
-            {when && <span className="fcv1-stream-time">· {when}</span>}
+            {when && <span className="fcv1-stream-time">{when}</span>}
             {item.status && <span className="fcv1-stream-status">· {item.status.replace(/_/g, ' ')}</span>}
           </div>
         </div>
       </div>
 
-      {summary && <p className="fcv1-stream-summary">{summary}</p>}
+      {supportingDetail && <p className="fcv1-stream-summary">{supportingDetail}</p>}
 
-      <div className="fcv1-stream-vote-row">
+      <div className="fcv1-stream-vote-row" onClick={(e) => e.stopPropagation()}>
         <button
           className={`fcv1-vote-btn fcv1-vote-support ${myPosition === 'support' ? 'is-active' : ''}`}
-          onClick={() => handleVote('support')}
+          onClick={(e) => handleVote(e, 'support')}
           disabled={pending}
         >
           👍 Support {counts.support > 0 && <span className="fcv1-vote-count">{counts.support}</span>}
         </button>
         <button
           className={`fcv1-vote-btn fcv1-vote-oppose ${myPosition === 'oppose' ? 'is-active' : ''}`}
-          onClick={() => handleVote('oppose')}
+          onClick={(e) => handleVote(e, 'oppose')}
           disabled={pending}
         >
           👎 Oppose {counts.oppose > 0 && <span className="fcv1-vote-count">{counts.oppose}</span>}
         </button>
         <button
           className={`fcv1-vote-btn fcv1-vote-neutral ${myPosition === 'neutral' ? 'is-active' : ''}`}
-          onClick={() => handleVote('neutral')}
+          onClick={(e) => handleVote(e, 'neutral')}
           disabled={pending}
         >
           😐 Neutral {counts.neutral > 0 && <span className="fcv1-vote-count">{counts.neutral}</span>}
