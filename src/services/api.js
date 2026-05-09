@@ -375,6 +375,30 @@ export async function fetchFeedByZip(zip) {
   }
 }
 
+// All constituent_votes the given user has cast on bills tied to this official.
+// Returns Map-friendly { votes: [{feed_card_id, position}] }.
+export async function fetchOfficialMyVotes(officialId, userId) {
+  if (!userId) return { success: false, votes: [] };
+  try {
+    const params = new URLSearchParams({ user_id: userId });
+    const token = window._psToken || localStorage.getItem('politiscore_token') || '';
+    const url = `${BASE_URL}/officials/${officialId}/my-votes?${params.toString()}`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      },
+    });
+    if (!response.ok) throw new Error(`Backend returned ${response.status}`);
+    const data = await response.json();
+    return { success: true, votes: Array.isArray(data?.votes) ? data.votes : [] };
+  } catch (err) {
+    console.error('PolitiCard my-votes error:', err);
+    return { success: false, votes: [] };
+  }
+}
+
 // Drill-down: legislative_activity records behind a scorecard metric.
 // activity_type: 'bill_sponsored' | 'bill_cosponsored' | 'vote' | 'committee'
 export async function fetchOfficialLegislativeActivity(officialId, { activityType, status, limit = 25, offset = 0 } = {}) {

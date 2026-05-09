@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import './App.css';
-import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip, fetchOfficialLegislation, fetchOfficialMetrics, fetchOfficialDonors, fetchOfficialFundersByIndustry, fetchOfficialSpending, fetchOfficialExpenditures, fetchOfficialScorecard, fetchOfficialCommittees, fetchUserEngagement, fetchOfficialAlignment, fetchOfficialLegislativeActivity } from './services/api';
+import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip, fetchOfficialLegislation, fetchOfficialMetrics, fetchOfficialDonors, fetchOfficialFundersByIndustry, fetchOfficialSpending, fetchOfficialExpenditures, fetchOfficialScorecard, fetchOfficialCommittees, fetchUserEngagement, fetchOfficialAlignment, fetchOfficialLegislativeActivity, fetchOfficialMyVotes } from './services/api';
 import FeedV1 from './feed/FeedV1';
 import Login from './Login';
 
@@ -3086,7 +3086,44 @@ function billStatusStyle(status) {
   return { bg: 'rgba(148,163,184,0.15)', fg: '#94a3b8', border: 'rgba(148,163,184,0.35)' };
 }
 
-function BillCard({ bill }) {
+// Pill showing the current device's stored constituent_vote on a bill.
+const USER_VOTE_PILL_STYLES = {
+  support: { bg: '#dcfce7', fg: '#166534', label: '👍 You supported' },
+  oppose:  { bg: '#fee2e2', fg: '#991b1b', label: '👎 You opposed' },
+  neutral: { bg: '#f1f5f9', fg: '#475569', label: '😐 You were neutral' },
+};
+
+function UserVotePill({ position }) {
+  if (!position) return null;
+  const style = USER_VOTE_PILL_STYLES[position];
+  if (!style) return null;
+  return (
+    <span style={{
+      fontSize:'0.62rem', fontWeight:800, padding:'0.2rem 0.5rem',
+      borderRadius:'999px', background: style.bg, color: style.fg,
+      whiteSpace:'nowrap',
+    }}>
+      {style.label}
+    </span>
+  );
+}
+
+function VoteCountsRow({ counts }) {
+  if (!counts) return null;
+  const support = counts.support || 0;
+  const oppose = counts.oppose || 0;
+  const neutral = counts.neutral || 0;
+  if (support + oppose + neutral === 0) return null;
+  return (
+    <div style={{display:'flex', gap:'0.6rem', fontSize:'0.65rem', color:'#64748b', fontWeight:700}}>
+      <span>👍 {support}</span>
+      <span>👎 {oppose}</span>
+      <span>😐 {neutral}</span>
+    </div>
+  );
+}
+
+function BillCard({ bill, userPosition }) {
   const status = bill.status || '';
   const sty = billStatusStyle(status);
   const dateStr = bill.date ? new Date(bill.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null;
@@ -3140,6 +3177,7 @@ function BillCard({ bill }) {
         {typeLabel && (
           <span style={{fontSize:'0.65rem', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em'}}>{typeLabel}</span>
         )}
+        <UserVotePill position={userPosition} />
         {bill.source_url && (
           <a
             href={bill.source_url}
@@ -3151,6 +3189,11 @@ function BillCard({ bill }) {
           </a>
         )}
       </div>
+      {bill.vote_counts && (
+        <div style={{marginTop:'0.4rem'}}>
+          <VoteCountsRow counts={bill.vote_counts} />
+        </div>
+      )}
     </div>
   );
 }
@@ -6956,6 +6999,7 @@ function SponsoredBillsDropdown({ officialId, viewBillsUrl }) {
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState(null);
   const [error, setError] = useState(null);
+  const [myVotes, setMyVotes] = useState({});
 
   const toggle = () => {
     const next = !expanded;
@@ -6963,14 +7007,21 @@ function SponsoredBillsDropdown({ officialId, viewBillsUrl }) {
     if (next && items === null && !loading && isFetchableId(officialId)) {
       setLoading(true);
       setError(null);
-      fetchOfficialLegislativeActivity(officialId, { activityType: 'bill_sponsored', limit: 25, offset: 0 })
-        .then(result => {
+      const billsP = fetchOfficialLegislativeActivity(officialId, { activityType: 'bill_sponsored', limit: 25, offset: 0 });
+      const votesP = fetchOfficialMyVotes(officialId, getAnonUserId());
+      Promise.all([billsP, votesP])
+        .then(([result, votesRes]) => {
           if (result.success && result.data) {
             setItems(Array.isArray(result.data.items) ? result.data.items : []);
           } else {
             setError(result.error || 'Failed to load bills');
             setItems([]);
           }
+          const map = {};
+          (votesRes.votes || []).forEach(v => {
+            if (v && v.feed_card_id != null) map[String(v.feed_card_id)] = v.position;
+          });
+          setMyVotes(map);
         })
         .finally(() => setLoading(false));
     }
@@ -7005,8 +7056,10 @@ function SponsoredBillsDropdown({ officialId, viewBillsUrl }) {
           )}
           {!loading && !error && items && items.length > 0 && (
             <ul style={{listStyle:'none', padding:0, margin:0, display:'flex', flexDirection:'column', gap:'0.4rem'}}>
-              {items.map((b, i) => (
-                <li key={`${b.bill_number || 'bill'}-${i}`} style={{
+              {items.map((b, i) => {
+                const userPosition = b.id != null ? myVotes[String(b.id)] : undefined;
+                return (
+                <li key={`${b.id ?? b.bill_number ?? 'bill'}-${i}`} style={{
                   background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'0.55rem',
                   padding:'0.5rem 0.6rem', display:'flex', flexDirection:'column', gap:'0.2rem',
                 }}>
@@ -7039,8 +7092,15 @@ function SponsoredBillsDropdown({ officialId, viewBillsUrl }) {
                       Status: {b.status}
                     </div>
                   )}
+                  {(userPosition || b.vote_counts) && (
+                    <div style={{display:'flex', alignItems:'center', gap:'0.5rem', flexWrap:'wrap', marginTop:'0.15rem'}}>
+                      <UserVotePill position={userPosition} />
+                      <VoteCountsRow counts={b.vote_counts} />
+                    </div>
+                  )}
                 </li>
-              ))}
+                );
+              })}
             </ul>
           )}
           {viewBillsUrl && (
@@ -7504,6 +7564,21 @@ function OfficialProfile({ official: o, onBack, likes, onLike, zip }) {
   const [officialMetrics, setOfficialMetrics] = useState([]);
   const [scorecard, setScorecard] = useState(null);
   const [scorecardLoading, setScorecardLoading] = useState(false);
+  const [myVotesByCardId, setMyVotesByCardId] = useState({});
+
+  React.useEffect(() => {
+    if (!o.id || !isFetchableId(o.id)) return;
+    let cancelled = false;
+    fetchOfficialMyVotes(o.id, getAnonUserId()).then((res) => {
+      if (cancelled) return;
+      const map = {};
+      (res.votes || []).forEach(v => {
+        if (v && v.feed_card_id != null) map[String(v.feed_card_id)] = v.position;
+      });
+      setMyVotesByCardId(map);
+    });
+    return () => { cancelled = true; };
+  }, [o.id]);
   const posts = FEED_ALL.filter(p => p.official.id === o.id);
   const mc = o.typologyMatch >= 65 ? '#16a34a' : o.typologyMatch >= 45 ? '#d97706' : '#dc2626';
   const hasBudget = !!BUDGETS[o.id];
@@ -7631,11 +7706,11 @@ function OfficialProfile({ official: o, onBack, likes, onLike, zip }) {
               .map(([year, items]) => (
                 <React.Fragment key={year}>
                   <div style={{fontSize:'0.62rem', fontWeight:800, textTransform:'uppercase', letterSpacing:'0.07em', color:'#94a3b8', margin:'0.85rem 0 0.4rem'}}>{year}</div>
-                  {items.map(bill => <BillCard key={bill.id} bill={bill} />)}
+                  {items.map(bill => <BillCard key={bill.id} bill={bill} userPosition={myVotesByCardId[String(bill.id)]} />)}
                 </React.Fragment>
               ))
           ) : legActivity.map(bill => (
-            <BillCard key={bill.id} bill={bill} />
+            <BillCard key={bill.id} bill={bill} userPosition={myVotesByCardId[String(bill.id)]} />
           ))}
         </div>
       )}
