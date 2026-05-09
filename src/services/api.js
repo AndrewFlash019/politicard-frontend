@@ -375,6 +375,33 @@ export async function fetchFeedByZip(zip) {
   }
 }
 
+// Drill-down: legislative_activity records behind a scorecard metric.
+// activity_type: 'bill_sponsored' | 'bill_cosponsored' | 'vote' | 'committee'
+export async function fetchOfficialLegislativeActivity(officialId, { activityType, status, limit = 25, offset = 0 } = {}) {
+  try {
+    const params = new URLSearchParams();
+    if (activityType) params.set('type', activityType);
+    if (status) params.set('status', status);
+    params.set('limit', String(limit));
+    params.set('offset', String(offset));
+    const token = window._psToken || localStorage.getItem('politiscore_token') || '';
+    const url = `${BASE_URL}/officials/${officialId}/legislative-activity?${params.toString()}`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      },
+    });
+    if (!response.ok) throw new Error(`Backend returned ${response.status}`);
+    const data = await response.json();
+    return { success: true, data };
+  } catch (err) {
+    console.error('PolitiCard drilldown error:', err);
+    return { success: false, data: null, error: String(err.message || err) };
+  }
+}
+
 // Feed Engine v1: structured per-ZIP response with today's brief, since-last-visit,
 // this-week, your-officials, and coming-up sections.
 export async function fetchFeedV1(zip, { lastVisit, limit = 20, offset = 0 } = {}) {

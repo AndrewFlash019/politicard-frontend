@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import './App.css';
-import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip, fetchOfficialLegislation, fetchOfficialMetrics, fetchOfficialDonors, fetchOfficialFundersByIndustry, fetchOfficialSpending, fetchOfficialExpenditures, fetchOfficialScorecard, fetchOfficialCommittees, fetchUserEngagement, fetchOfficialAlignment } from './services/api';
+import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip, fetchOfficialLegislation, fetchOfficialMetrics, fetchOfficialDonors, fetchOfficialFundersByIndustry, fetchOfficialSpending, fetchOfficialExpenditures, fetchOfficialScorecard, fetchOfficialCommittees, fetchUserEngagement, fetchOfficialAlignment, fetchOfficialLegislativeActivity } from './services/api';
 import FeedV1 from './feed/FeedV1';
 import Login from './Login';
 
@@ -6951,7 +6951,115 @@ const METRIC_RATING_STYLES = {
   no_data:    { bg: '#f1f5f9', fg: '#64748b', dot: '#94a3b8', label: 'Awaiting data' },
 };
 
-function MetricCard({ metric }) {
+function SponsoredBillsDropdown({ officialId, viewBillsUrl }) {
+  const [expanded, setExpanded] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [items, setItems] = useState(null);
+  const [error, setError] = useState(null);
+
+  const toggle = () => {
+    const next = !expanded;
+    setExpanded(next);
+    if (next && items === null && !loading && isFetchableId(officialId)) {
+      setLoading(true);
+      setError(null);
+      fetchOfficialLegislativeActivity(officialId, { activityType: 'bill_sponsored', limit: 25, offset: 0 })
+        .then(result => {
+          if (result.success && result.data) {
+            setItems(Array.isArray(result.data.items) ? result.data.items : []);
+          } else {
+            setError(result.error || 'Failed to load bills');
+            setItems([]);
+          }
+        })
+        .finally(() => setLoading(false));
+    }
+  };
+
+  return (
+    <div style={{marginTop:'0.4rem'}}>
+      <button
+        type="button"
+        onClick={toggle}
+        style={{
+          display:'flex', alignItems:'center', gap:'0.3rem',
+          background:'transparent', border:'none', padding:0,
+          color:'#6366f1', fontSize:'0.7rem', fontWeight:700,
+          cursor:'pointer', textTransform:'uppercase', letterSpacing:'0.04em',
+        }}
+      >
+        <span aria-hidden="true">{expanded ? '▾' : '▸'}</span>
+        {expanded ? 'Hide bills' : 'View bills'}
+      </button>
+
+      {expanded && (
+        <div style={{marginTop:'0.45rem', display:'flex', flexDirection:'column', gap:'0.4rem'}}>
+          {loading && (
+            <div style={{fontSize:'0.7rem', color:'#64748b'}}>Loading bills…</div>
+          )}
+          {!loading && error && (
+            <div style={{fontSize:'0.7rem', color:'#b91c1c'}}>Couldn't load bills: {error}</div>
+          )}
+          {!loading && !error && items && items.length === 0 && (
+            <div style={{fontSize:'0.7rem', color:'#64748b'}}>No sponsored bills found.</div>
+          )}
+          {!loading && !error && items && items.length > 0 && (
+            <ul style={{listStyle:'none', padding:0, margin:0, display:'flex', flexDirection:'column', gap:'0.4rem'}}>
+              {items.map((b, i) => (
+                <li key={`${b.bill_number || 'bill'}-${i}`} style={{
+                  background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'0.55rem',
+                  padding:'0.5rem 0.6rem', display:'flex', flexDirection:'column', gap:'0.2rem',
+                }}>
+                  <div style={{display:'flex', justifyContent:'space-between', gap:'0.4rem', alignItems:'baseline'}}>
+                    <span style={{fontSize:'0.72rem', fontWeight:800, color:'#0f172a'}}>
+                      {b.bill_number || 'Bill'}
+                    </span>
+                    {b.date && (
+                      <span style={{fontSize:'0.62rem', color:'#94a3b8'}}>
+                        {String(b.date).slice(0, 10)}
+                      </span>
+                    )}
+                  </div>
+                  {b.title && (
+                    <div style={{fontSize:'0.72rem', color:'#1e293b', lineHeight:1.35}}>
+                      {b.source_url ? (
+                        <a href={b.source_url} target="_blank" rel="noopener noreferrer" style={{color:'#1e293b', textDecoration:'none'}}>
+                          {b.title}
+                        </a>
+                      ) : b.title}
+                    </div>
+                  )}
+                  {b.plain_english_summary && (
+                    <div style={{fontSize:'0.66rem', color:'#475569', lineHeight:1.4}}>
+                      {b.plain_english_summary}
+                    </div>
+                  )}
+                  {b.status && (
+                    <div style={{fontSize:'0.6rem', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.04em'}}>
+                      Status: {b.status}
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {viewBillsUrl && (
+            <a
+              href={viewBillsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{fontSize:'0.66rem', fontWeight:700, color:'#6366f1', textDecoration:'none'}}
+            >
+              View all on Congress.gov →
+            </a>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MetricCard({ metric, officialId }) {
   const rating = metric.rating || 'no_data';
   const style = METRIC_RATING_STYLES[rating] || METRIC_RATING_STYLES.no_data;
   const isNoData = rating === 'no_data';
@@ -6959,6 +7067,7 @@ function MetricCard({ metric }) {
   const sourceHint = metric.source && metric.source !== 'Manual research required' ? metric.source : 'public records';
   const valueText = metric.value || '';
   const unitText = metric.unit ? ` ${metric.unit}` : '';
+  const isBillsSponsored = metric.key === 'bills_sponsored';
 
   return (
     <div style={{
@@ -7013,6 +7122,10 @@ function MetricCard({ metric }) {
         </>
       )}
 
+      {isBillsSponsored && !isNoData && (
+        <SponsoredBillsDropdown officialId={officialId} viewBillsUrl={metric.view_bills_url} />
+      )}
+
       <div style={{fontSize:'0.62rem', color:'#94a3b8', marginTop:'auto', paddingTop:'0.25rem'}}>
         Source: {metric.source_url ? (
           <a href={metric.source_url} target="_blank" rel="noopener noreferrer" style={{color:'#6366f1', textDecoration:'none'}}>
@@ -7025,7 +7138,7 @@ function MetricCard({ metric }) {
   );
 }
 
-function AccountabilityScorecardSection({ scorecard, loading }) {
+function AccountabilityScorecardSection({ scorecard, loading, officialId }) {
   if (loading) {
     return (
       <div style={{margin:'0.75rem 1rem', padding:'0.85rem 0.95rem', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'0.85rem'}}>
@@ -7098,12 +7211,12 @@ function AccountabilityScorecardSection({ scorecard, loading }) {
       )}
 
       {/* Metric grid — split haveData (always visible) from no_data (collapsed) */}
-      <ScorecardMetricsGrid metrics={metrics} />
+      <ScorecardMetricsGrid metrics={metrics} officialId={officialId} />
     </div>
   );
 }
 
-function ScorecardMetricsGrid({ metrics }) {
+function ScorecardMetricsGrid({ metrics, officialId }) {
   const [expanded, setExpanded] = React.useState(false);
   const haveData = metrics.filter(m => m.rating !== 'no_data');
   const pending  = metrics.filter(m => m.rating === 'no_data');
@@ -7118,7 +7231,7 @@ function ScorecardMetricsGrid({ metrics }) {
           gap:'0.6rem',
         }}>
           {haveData.map((m, idx) => (
-            <MetricCard key={`${m.key}-${idx}`} metric={m} />
+            <MetricCard key={`${m.key}-${idx}`} metric={m} officialId={officialId} />
           ))}
         </div>
       )}
@@ -7142,7 +7255,7 @@ function ScorecardMetricsGrid({ metrics }) {
               gap:'0.5rem',
             }}>
               {pending.map((m, idx) => (
-                <MetricCard key={`pend-${m.key}-${idx}`} metric={m} />
+                <MetricCard key={`pend-${m.key}-${idx}`} metric={m} officialId={officialId} />
               ))}
             </div>
           )}
@@ -7628,7 +7741,7 @@ function OfficialProfile({ official: o, onBack, likes, onLike, zip }) {
       <BillsSponsoredCard officialId={o.id} />
       <CommitteeAssignmentsCard officialId={o.id} />
 
-      <AccountabilityScorecardSection scorecard={scorecard} loading={scorecardLoading} />
+      <AccountabilityScorecardSection scorecard={scorecard} loading={scorecardLoading} officialId={o.id} />
 
       <div className="prof-tabs">
         <button className={`prof-tab-btn ${profTab==='posts'?'prof-tab-active':''}`} onClick={() => setProfTab('posts')}>📝 Posts</button>
