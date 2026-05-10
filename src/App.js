@@ -1,12 +1,21 @@
 import React, { useState, useRef } from 'react';
 import './App.css';
-import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip, fetchOfficialLegislation, fetchOfficialMetrics, fetchOfficialDonors, fetchOfficialFundersByIndustry, fetchOfficialSpending, fetchOfficialExpenditures, fetchOfficialScorecard, fetchOfficialCommittees, fetchUserEngagement, fetchOfficialAlignment, fetchOfficialLegislativeActivity, fetchOfficialMyVotes } from './services/api';
+import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip, fetchOfficialLegislation, fetchOfficialMetrics, fetchOfficialDonors, fetchOfficialFundersByIndustry, fetchOfficialSpending, fetchOfficialExpenditures, fetchOfficialScorecard, fetchOfficialCommittees, fetchUserEngagement, fetchOfficialAlignment, fetchOfficialLegislativeActivity, fetchOfficialMyVotes, postConstituentVote } from './services/api';
 import FeedV1 from './feed/FeedV1';
 import Login from './Login';
 
 // Backend IDs are numeric. Frontend-only mocks use 'mock-*' string IDs which
 // must never be sent to /officials/<id>/* endpoints.
 const isFetchableId = (id) => typeof id === 'number' || (typeof id === 'string' && /^\d+$/.test(id));
+
+// "IN_COMMITTEE" → "In Committee", "PASSED_CHAMBER" → "Passed Chamber".
+function formatStatus(status) {
+  if (status == null) return '';
+  return String(status)
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 // Compact dollar formatting: $45B / $5M / $1.2K / $850 / —
 function formatMoney(n) {
@@ -3170,9 +3179,8 @@ function BillCard({ bill, userPosition }) {
             background: sty.bg,
             color: sty.fg,
             border:`1px solid ${sty.border}`,
-            textTransform:'uppercase',
-            letterSpacing:'0.04em',
-          }}>{status}</span>
+            letterSpacing:'0.02em',
+          }}>{formatStatus(status)}</span>
         )}
         {typeLabel && (
           <span style={{fontSize:'0.65rem', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em'}}>{typeLabel}</span>
@@ -4722,6 +4730,22 @@ function MyProfileTab({ zip, userName, userPhoto, onPhotoChange, postsRead, like
         </div>
 
         <p className="civic-badge-desc">{badge.desc}</p>
+
+        {/* Polling activity breakdown — renders when the engagement endpoint
+            exposes per-position counts; silent otherwise. */}
+        {engagement && (engagement.support_count != null || engagement.oppose_count != null || engagement.neutral_count != null) && (
+          <div style={{display:'flex', gap:'0.6rem', flexWrap:'wrap', margin:'0.4rem 0 0.6rem', fontSize:'0.72rem', color:'var(--text-2)'}}>
+            <span style={{background:'#dcfce7', color:'#166534', padding:'0.2rem 0.5rem', borderRadius:'999px', fontWeight:700}}>
+              👍 {engagement.support_count || 0} supported
+            </span>
+            <span style={{background:'#fee2e2', color:'#991b1b', padding:'0.2rem 0.5rem', borderRadius:'999px', fontWeight:700}}>
+              👎 {engagement.oppose_count || 0} opposed
+            </span>
+            <span style={{background:'#f1f5f9', color:'#475569', padding:'0.2rem 0.5rem', borderRadius:'999px', fontWeight:700}}>
+              😐 {engagement.neutral_count || 0} neutral
+            </span>
+          </div>
+        )}
 
         {/* Progress bar to next badge */}
         {nextBadge ? (
@@ -6994,12 +7018,75 @@ const METRIC_RATING_STYLES = {
   no_data:    { bg: '#f1f5f9', fg: '#64748b', dot: '#94a3b8', label: 'Awaiting data' },
 };
 
+function BillVoteRow({ bill, userPosition, pending, onVote }) {
+  const counts = bill.vote_counts || { support: 0, oppose: 0, neutral: 0 };
+  const total = (counts.support || 0) + (counts.oppose || 0) + (counts.neutral || 0);
+  const btn = (pos, label, activeBg, activeFg, activeBorder) => {
+    const active = userPosition === pos;
+    return (
+      <button
+        type="button"
+        disabled={pending || bill.id == null}
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); onVote(pos); }}
+        style={{
+          display:'inline-flex', alignItems:'center', gap:'0.25rem',
+          fontSize:'0.66rem', fontWeight:700,
+          padding:'0.25rem 0.55rem', borderRadius:'999px',
+          border:`1px solid ${active ? activeBorder : '#e2e8f0'}`,
+          background: active ? activeBg : '#ffffff',
+          color: active ? activeFg : '#475569',
+          cursor: pending ? 'progress' : 'pointer',
+          opacity: pending ? 0.7 : 1,
+        }}
+      >
+        {label} {counts[pos] > 0 && (
+          <span style={{background:'rgba(0,0,0,0.06)', padding:'0.02rem 0.3rem', borderRadius:'999px', fontSize:'0.6rem', fontWeight:800}}>
+            {counts[pos]}
+          </span>
+        )}
+      </button>
+    );
+  };
+  return (
+    <div style={{display:'flex', alignItems:'center', gap:'0.35rem', flexWrap:'wrap', marginTop:'0.25rem'}}>
+      {btn('support', '👍 Support', '#dcfce7', '#166534', '#16a34a')}
+      {btn('oppose',  '👎 Oppose',  '#fee2e2', '#991b1b', '#dc2626')}
+      {btn('neutral', '😐 Neutral', '#f1f5f9', '#374151', '#6b7280')}
+      {total > 0 && (
+        <span style={{marginLeft:'auto', fontSize:'0.6rem', color:'#94a3b8'}}>
+          {total} vote{total === 1 ? '' : 's'}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function SponsoredBillsDropdown({ officialId, viewBillsUrl }) {
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState(null);
   const [error, setError] = useState(null);
   const [myVotes, setMyVotes] = useState({});
+  const [pendingVoteId, setPendingVoteId] = useState(null);
+
+  // Backend currently returns duplicate rows for the same bill_number (one
+  // from the sponsorship ingest, one from a status update). Dedup client-side
+  // by bill_number, keeping the row with the most recent date. This is a
+  // stopgap — the proper fix is `SELECT DISTINCT ON (bill_number) … ORDER BY
+  // bill_number, date DESC` in /officials/{id}/legislative-activity.
+  const dedupBills = (rows) => {
+    if (!Array.isArray(rows)) return [];
+    const byBill = new Map();
+    for (const row of rows) {
+      const key = row.bill_number || `__${row.id}`;
+      const existing = byBill.get(key);
+      if (!existing) { byBill.set(key, row); continue; }
+      const a = row.date ? new Date(row.date).getTime() : 0;
+      const b = existing.date ? new Date(existing.date).getTime() : 0;
+      if (a >= b) byBill.set(key, row);
+    }
+    return Array.from(byBill.values());
+  };
 
   const toggle = () => {
     const next = !expanded;
@@ -7012,7 +7099,8 @@ function SponsoredBillsDropdown({ officialId, viewBillsUrl }) {
       Promise.all([billsP, votesP])
         .then(([result, votesRes]) => {
           if (result.success && result.data) {
-            setItems(Array.isArray(result.data.items) ? result.data.items : []);
+            const rows = Array.isArray(result.data.items) ? result.data.items : [];
+            setItems(dedupBills(rows));
           } else {
             setError(result.error || 'Failed to load bills');
             setItems([]);
@@ -7025,6 +7113,36 @@ function SponsoredBillsDropdown({ officialId, viewBillsUrl }) {
         })
         .finally(() => setLoading(false));
     }
+  };
+
+  const castVote = async (bill, position) => {
+    if (!isFetchableId(officialId) || bill.id == null) return;
+    const cardKey = String(bill.id);
+    if (pendingVoteId === cardKey) return;
+    setPendingVoteId(cardKey);
+
+    const prevPosition = myVotes[cardKey];
+    setMyVotes((m) => ({ ...m, [cardKey]: position }));
+    setItems((rows) => (rows || []).map((b) => {
+      if (b.id !== bill.id) return b;
+      const counts = { support: 0, oppose: 0, neutral: 0, ...(b.vote_counts || {}) };
+      if (prevPosition && counts[prevPosition] > 0) counts[prevPosition] -= 1;
+      counts[position] = (counts[position] || 0) + 1;
+      return { ...b, vote_counts: counts };
+    }));
+
+    const res = await postConstituentVote({ officialId, feedCardId: bill.id, position });
+    if (res && res.success && res.data) {
+      setItems((rows) => (rows || []).map((b) => (b.id === bill.id ? {
+        ...b,
+        vote_counts: {
+          support: res.data.support_count || 0,
+          oppose: res.data.oppose_count || 0,
+          neutral: res.data.neutral_count || 0,
+        },
+      } : b)));
+    }
+    setPendingVoteId(null);
   };
 
   return (
@@ -7088,16 +7206,16 @@ function SponsoredBillsDropdown({ officialId, viewBillsUrl }) {
                     </div>
                   )}
                   {b.status && (
-                    <div style={{fontSize:'0.6rem', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.04em'}}>
-                      Status: {b.status}
+                    <div style={{fontSize:'0.62rem', color:'#64748b', letterSpacing:'0.02em'}}>
+                      Status: {formatStatus(b.status)}
                     </div>
                   )}
-                  {(userPosition || b.vote_counts) && (
-                    <div style={{display:'flex', alignItems:'center', gap:'0.5rem', flexWrap:'wrap', marginTop:'0.15rem'}}>
-                      <UserVotePill position={userPosition} />
-                      <VoteCountsRow counts={b.vote_counts} />
-                    </div>
-                  )}
+                  <BillVoteRow
+                    bill={b}
+                    userPosition={userPosition}
+                    pending={pendingVoteId === String(b.id)}
+                    onVote={(pos) => castVote(b, pos)}
+                  />
                 </li>
                 );
               })}
@@ -7480,6 +7598,11 @@ function CommitteeAssignmentsCard({ officialId }) {
             </React.Fragment>
           ))}
           {!loading && orphans.map((o) => renderRow(o))}
+          {!loading && unique.length > 0 && (
+            <div style={{marginTop:'0.4rem', fontSize:'0.7rem', color:'var(--text-3)', fontStyle:'italic', textAlign:'center'}}>
+              Showing available committee data
+            </div>
+          )}
         </div>
       )}
     </div>

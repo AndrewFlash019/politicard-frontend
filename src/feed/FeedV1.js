@@ -52,6 +52,15 @@ function levelBadge(level) {
   return null;
 }
 
+// "IN_COMMITTEE" → "In Committee", "PASSED_CHAMBER" → "Passed Chamber".
+function formatStatus(status) {
+  if (status == null) return '';
+  return String(status)
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 // ---------------------------------------------------------------------------
 // WelcomeBack header (unchanged from prior implementation)
 // ---------------------------------------------------------------------------
@@ -210,7 +219,7 @@ function StreamCard({ item, onVote }) {
           </div>
           <div className="fcv1-stream-meta-bot">
             {when && <span className="fcv1-stream-time">{when}</span>}
-            {item.status && <span className="fcv1-stream-status">· {item.status.replace(/_/g, ' ')}</span>}
+            {item.status && <span className="fcv1-stream-status">· {formatStatus(item.status)}</span>}
           </div>
         </div>
       </div>
