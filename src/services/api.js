@@ -564,3 +564,49 @@ export async function fetchOfficialAlignment(officialId, userId) {
   }
 }
 
+// ─── Recent votes by this user, joined to bill metadata ────────────────────
+export async function fetchUserRecentVotes(userId, { limit = 10 } = {}) {
+  if (!userId) return { success: false, items: [] };
+  try {
+    const r = await fetch(`${BASE_URL}/users/${encodeURIComponent(userId)}/votes?limit=${limit}`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!r.ok) throw new Error(`Backend returned ${r.status}`);
+    const data = await r.json();
+    return { success: true, items: Array.isArray(data?.items) ? data.items : [] };
+  } catch (err) {
+    console.error('PolitiScore user votes error:', err);
+    return { success: false, items: [], error: String(err.message || err) };
+  }
+}
+
+// ─── Typology quiz ───────────────────────────────────────────────────────────
+export async function fetchTypologyQuestions() {
+  try {
+    const r = await fetch(`${BASE_URL}/typology/questions`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!r.ok) throw new Error(`Backend returned ${r.status}`);
+    return { success: true, data: await r.json() };
+  } catch (err) {
+    console.error('PolitiScore typology questions error:', err);
+    return { success: false, data: null, error: String(err.message || err) };
+  }
+}
+
+export async function submitTypologyQuiz({ userId, answers }) {
+  try {
+    const r = await fetch(`${BASE_URL}/typology/submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, answers }),
+    });
+    if (!r.ok) throw new Error(`Backend returned ${r.status}`);
+    return { success: true, data: await r.json() };
+  } catch (err) {
+    console.error('PolitiScore typology submit error:', err);
+    return { success: false, data: null, error: String(err.message || err) };
+  }
+}

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useStreak } from './useStreak';
 import { fetchFeedStream, postConstituentVote } from '../services/api';
+import { formatResult } from '../utils';
 import './FeedV1.css';
 
 const HOURS_24_MS = 24 * 60 * 60 * 1000;
@@ -50,15 +51,6 @@ function levelBadge(level) {
   if (v === 'state') return { label: 'STATE', color: '#0891b2' };
   if (v === 'local') return { label: 'LOCAL', color: '#16a34a' };
   return null;
-}
-
-// "IN_COMMITTEE" → "In Committee", "PASSED_CHAMBER" → "Passed Chamber".
-function formatStatus(status) {
-  if (status == null) return '';
-  return String(status)
-    .replace(/_/g, ' ')
-    .toLowerCase()
-    .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 // ---------------------------------------------------------------------------
@@ -219,7 +211,9 @@ function StreamCard({ item, onVote }) {
           </div>
           <div className="fcv1-stream-meta-bot">
             {when && <span className="fcv1-stream-time">{when}</span>}
-            {item.status && <span className="fcv1-stream-status">· {formatStatus(item.status)}</span>}
+            {(item.result || item.status) && (
+              <span className="fcv1-stream-status">· {formatResult(item.result, item.status)}</span>
+            )}
           </div>
         </div>
       </div>

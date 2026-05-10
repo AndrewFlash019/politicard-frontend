@@ -1,21 +1,14 @@
 import React, { useState, useRef } from 'react';
 import './App.css';
-import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip, fetchOfficialLegislation, fetchOfficialMetrics, fetchOfficialDonors, fetchOfficialFundersByIndustry, fetchOfficialSpending, fetchOfficialExpenditures, fetchOfficialScorecard, fetchOfficialCommittees, fetchUserEngagement, fetchOfficialAlignment, fetchOfficialLegislativeActivity, fetchOfficialMyVotes, postConstituentVote } from './services/api';
+import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip, fetchOfficialLegislation, fetchOfficialMetrics, fetchOfficialDonors, fetchOfficialFundersByIndustry, fetchOfficialSpending, fetchOfficialExpenditures, fetchOfficialScorecard, fetchOfficialCommittees, fetchUserEngagement, fetchOfficialAlignment, fetchOfficialLegislativeActivity, fetchOfficialMyVotes, postConstituentVote, fetchUserRecentVotes } from './services/api';
+import { formatStatus, formatResult } from './utils';
+import BackendTypologyQuiz, { getStoredTypology, clearStoredTypology } from './pages/TypologyQuiz';
 import FeedV1 from './feed/FeedV1';
 import Login from './Login';
 
 // Backend IDs are numeric. Frontend-only mocks use 'mock-*' string IDs which
 // must never be sent to /officials/<id>/* endpoints.
 const isFetchableId = (id) => typeof id === 'number' || (typeof id === 'string' && /^\d+$/.test(id));
-
-// "IN_COMMITTEE" → "In Committee", "PASSED_CHAMBER" → "Passed Chamber".
-function formatStatus(status) {
-  if (status == null) return '';
-  return String(status)
-    .replace(/_/g, ' ')
-    .toLowerCase()
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-}
 
 // Compact dollar formatting: $45B / $5M / $1.2K / $850 / —
 function formatMoney(n) {
@@ -1046,9 +1039,26 @@ const typeLabel = (t) => t.charAt(0).toUpperCase() + t.slice(1);
 
 // ─── OFFICIAL AVATAR (photo + emoji fallback) ────────────────────────────────
 
+// Treat ui-avatars.com (initial-only generated images) as not-a-real-photo so
+// we render the silhouette placeholder instead — looks more professional.
+const isPlaceholderPhoto = (url) =>
+  !!url && /(^|\.)ui-avatars\.com/i.test(String(url));
+
+function PlaceholderSilhouette({ size }) {
+  const r = size / 2;
+  return (
+    <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden="true">
+      <circle cx="24" cy="24" r="24" fill="#e2e8f0" />
+      <circle cx="24" cy="19" r="7" fill="#94a3b8" />
+      <path d="M9 41c2-7 8-11 15-11s13 4 15 11v3H9z" fill="#94a3b8" />
+    </svg>
+  );
+}
+
 function OfficialAvatar({ official, size = 44, radius = 12, fontSize = '1.3rem' }) {
   const [imgFailed, setImgFailed] = useState(false);
-  const hasImg = official.image && !imgFailed;
+  const realPhoto = official.image && !isPlaceholderPhoto(official.image);
+  const hasImg = realPhoto && !imgFailed;
   return (
     <div
       className="off-avatar"
@@ -1070,6 +1080,8 @@ function OfficialAvatar({ official, size = 44, radius = 12, fontSize = '1.3rem' 
           onError={() => setImgFailed(true)}
           style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top' }}
         />
+      ) : official.image && isPlaceholderPhoto(official.image) ? (
+        <PlaceholderSilhouette size={size} />
       ) : (
         <span>{official.avatar}</span>
       )}
@@ -3895,7 +3907,107 @@ function CommissionerScorecard({ officialId }) {
   );
 }
 
+function ExploreBillsPanel({ zip }) {
+  const [items, setItems] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+
+  React.useEffect(() => {
+    if (!zip) return;
+    let cancelled = false;
+    setLoading(true);
+    fetchFeedByZip(zip).then((res) => {
+      if (cancelled) return;
+      const all = (res.items || []).filter((it) => (it.bill_number || it.title));
+      setItems(all);
+    }).finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [zip]);
+
+  if (loading) return <div style={{padding:'1.5rem 1rem', color:'#64748b'}}>Loading bills…</div>;
+  if (!items || items.length === 0) return <div style={{padding:'1.5rem 1rem', color:'#64748b'}}>No bills found for ZIP {zip}.</div>;
+
+  const q = query.trim().toLowerCase();
+  const matches = (b) => {
+    const haystack = `${b.title || ''} ${b.body || ''} ${b.bill_number || ''} ${b.official_name || ''}`.toLowerCase();
+    if (q && !haystack.includes(q)) return false;
+    if (statusFilter !== 'all') {
+      const s = (b.status || b.result || '').toLowerCase();
+      if (statusFilter === 'in_committee' && !/committee/.test(s)) return false;
+      if (statusFilter === 'passed' && !/pass/.test(s)) return false;
+      if (statusFilter === 'failed' && !/fail|reject/.test(s)) return false;
+    }
+    return true;
+  };
+  const filtered = items.filter(matches).slice(0, 50);
+
+  return (
+    <div style={{padding:'0.5rem 1rem 1.5rem'}}>
+      <div style={{display:'flex', gap:'0.5rem', flexWrap:'wrap', marginBottom:'0.85rem'}}>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search bills, officials, keywords…"
+          style={{flex:1, minWidth:0, padding:'0.55rem 0.75rem', borderRadius:10, border:'1px solid #e2e8f0', fontSize:'0.85rem'}}
+        />
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          style={{padding:'0.55rem 0.75rem', borderRadius:10, border:'1px solid #e2e8f0', background:'#fff', fontSize:'0.85rem'}}
+        >
+          <option value="all">All statuses</option>
+          <option value="in_committee">In Committee</option>
+          <option value="passed">Passed</option>
+          <option value="failed">Failed</option>
+        </select>
+      </div>
+      <div style={{fontSize:'0.7rem', color:'#94a3b8', marginBottom:'0.6rem'}}>
+        Showing {filtered.length} of {items.length} bills
+      </div>
+      <div style={{display:'flex', flexDirection:'column', gap:'0.5rem'}}>
+        {filtered.map((b) => (
+          <div key={b.id} style={{background:'#ffffff', border:'1px solid #e2e8f0', borderRadius:'0.65rem', padding:'0.7rem 0.85rem'}}>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:'0.4rem'}}>
+              <span style={{fontSize:'0.78rem', fontWeight:800, color:'#0f172a'}}>{b.bill_number || 'Bill'}</span>
+              {(b.status || b.result) && (
+                <span style={{fontSize:'0.6rem', fontWeight:700, color:'#475569', background:'#f1f5f9', padding:'0.15rem 0.45rem', borderRadius:'999px', letterSpacing:'0.02em'}}>
+                  {formatResult(b.result, b.status)}
+                </span>
+              )}
+            </div>
+            {b.title && (
+              <div style={{fontSize:'0.82rem', color:'#1e293b', lineHeight:1.35, marginTop:'0.25rem'}}>
+                {b.title}
+              </div>
+            )}
+            {b.official_name && (
+              <div style={{fontSize:'0.7rem', color:'#64748b', marginTop:'0.25rem'}}>
+                — {b.official_name}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ExploreIssuesPanel() {
+  return (
+    <div style={{padding:'2.5rem 1rem', textAlign:'center', color:'#64748b'}}>
+      <div style={{fontSize:'2rem', marginBottom:'0.5rem'}}>🚧</div>
+      <div style={{fontWeight:800, color:'#0f172a', fontSize:'1.05rem'}}>Issues, coming soon</div>
+      <p style={{marginTop:'0.4rem', fontSize:'0.85rem', maxWidth:'420px', marginInline:'auto'}}>
+        We'll group bills by topic (immigration, healthcare, education, environment) once
+        topic tagging lands in the feed pipeline.
+      </p>
+    </div>
+  );
+}
+
 function ExploreTab({ onProfile, liveOfficials = [], zip = '', countyMetrics = null }) {
+  const [exploreSubTab, setExploreSubTab] = useState('officials');
   const FLAGLER_ZIPS = ['32110','32136','32137','32164'];
   const LOCAL_COVERED_ZIPS = new Set([
     // Flagler
@@ -3973,8 +4085,44 @@ const toggleSubLevel = (branch, level) => {
   const key = `${branch}-${level}`;
   setCollapsedSubLevels(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
 };
+  const SubTabBar = (
+    <div style={{display:'flex', gap:'0.4rem', padding:'0.5rem 1rem 0.25rem', borderBottom:'1px solid #e2e8f0'}}>
+      {[
+        {id:'officials', label:'Officials'},
+        {id:'bills',     label:'Bills'},
+        {id:'issues',    label:'Issues'},
+      ].map((t) => {
+        const active = exploreSubTab === t.id;
+        return (
+          <button
+            key={t.id}
+            onClick={() => setExploreSubTab(t.id)}
+            style={{
+              padding:'0.5rem 0.85rem', borderRadius:'10px 10px 0 0', border:'none',
+              background: active ? '#eef2ff' : 'transparent',
+              color: active ? '#4338ca' : '#64748b',
+              fontWeight: active ? 800 : 600, fontSize:'0.85rem',
+              cursor:'pointer', borderBottom: active ? '2px solid #6366f1' : '2px solid transparent',
+              marginBottom:'-1px',
+            }}
+          >
+            {t.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  if (exploreSubTab === 'bills') {
+    return <div className="tab-content">{SubTabBar}<ExploreBillsPanel zip={zip} /></div>;
+  }
+  if (exploreSubTab === 'issues') {
+    return <div className="tab-content">{SubTabBar}<ExploreIssuesPanel /></div>;
+  }
+
   return (
     <div className="tab-content">
+      {SubTabBar}
       <div className="exp-top-row">
         <div>
           <h2 className="section-head">Your Representatives</h2>
@@ -4553,12 +4701,22 @@ function DimensionBars({ scores }) {
   );
 }
 
-function MyProfileTab({ zip, userName, userPhoto, onPhotoChange, postsRead, likes, followedLocations = [], onManageLocations, pollVotesCount = 0, pinnedPosts = [], onUnpin, onLogout, liveOfficials = [], liveFeedItems = [] }) {
+function MyProfileTab({ zip, userName, userPhoto, onPhotoChange, postsRead, likes, followedLocations = [], onManageLocations, pollVotesCount = 0, pinnedPosts = [], onUnpin, onLogout, liveOfficials = [], liveFeedItems = [], onTakeQuiz }) {
   const fileRef = useRef();
   const [showQuiz, setShowQuiz] = useState(false);
   const [typology, setTypology] = useState(null);
   const [rawScores, setRawScores] = useState(null);
   const [lang, setLang] = useState('en');
+  const [backendTypology, setBackendTypology] = useState(() => getStoredTypology());
+  const [recentVotes, setRecentVotes] = useState([]);
+
+  React.useEffect(() => {
+    fetchUserRecentVotes(getAnonUserId(), { limit: 10 }).then((res) => {
+      if (res.success) setRecentVotes(res.items || []);
+    });
+    // Refresh stored typology in case it changed in another tab/overlay
+    setBackendTypology(getStoredTypology());
+  }, []);
 
   // ── Civic Engagement Badge ────────────────────────────────────────────────
   const CIVIC_BADGES = [
@@ -4713,6 +4871,31 @@ function MyProfileTab({ zip, userName, userPhoto, onPhotoChange, postsRead, like
         ))}
       </div>
 
+      {/* ── Backend typology (from /typology/quiz) ─────────────────────── */}
+      {backendTypology && (
+        <div style={{margin:'1rem 1rem 0', padding:'1rem 1.1rem', background:'#ffffff', border:'1px solid #c7d2fe', borderRadius:'0.95rem'}}>
+          <div style={{fontSize:'0.7rem', fontWeight:800, letterSpacing:'0.06em', color:'#6366f1', textTransform:'uppercase'}}>Political Typology</div>
+          <div style={{margin:'0.35rem 0 0.25rem', fontSize:'1.45rem', fontWeight:900, color:'#0f172a', letterSpacing:'-0.015em'}}>
+            You are a {backendTypology.typology}
+          </div>
+          <p style={{margin:'0 0 0.75rem', color:'#475569', fontSize:'0.85rem', lineHeight:1.5}}>
+            {backendTypology.description}
+          </p>
+          <div style={{display:'flex', gap:'0.85rem', fontSize:'0.78rem', color:'#475569'}}>
+            <span>Economic: <strong>{Number(backendTypology.economic_score).toFixed(2)}</strong></span>
+            <span>Social: <strong>{Number(backendTypology.social_score).toFixed(2)}</strong></span>
+          </div>
+          <div style={{marginTop:'0.85rem', display:'flex', gap:'0.5rem', flexWrap:'wrap'}}>
+            <button
+              onClick={() => { clearStoredTypology(); setBackendTypology(null); if (onTakeQuiz) onTakeQuiz(); }}
+              style={{padding:'0.45rem 0.85rem', borderRadius:10, border:'1px solid #c7d2fe', background:'#eef2ff', color:'#4338ca', fontWeight:800, fontSize:'0.78rem', cursor:'pointer'}}
+            >
+              Retake quiz →
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Civic Engagement Badge ──────────────────────────────────────── */}
       <div className="civic-badge-card" style={{ borderColor: badge.color + '44', background: badge.color + '0d' }}>
         <div className="civic-badge-header">
@@ -4777,6 +4960,46 @@ function MyProfileTab({ zip, userName, userPhoto, onPhotoChange, postsRead, like
           })}
         </div>
       </div>
+
+      {/* ── My Votes (last 10) ─────────────────────────────────────────── */}
+      {recentVotes.length > 0 && (
+        <div style={{margin:'1rem 1rem 0', padding:'0.95rem 1rem', background:'#ffffff', border:'1px solid var(--border, #e2e8f0)', borderRadius:'0.85rem'}}>
+          <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'0.6rem'}}>
+            <div style={{fontSize:'0.7rem', fontWeight:800, letterSpacing:'0.06em', color:'#475569', textTransform:'uppercase'}}>
+              My Votes
+            </div>
+            <div style={{fontSize:'0.68rem', color:'#94a3b8'}}>last {recentVotes.length}</div>
+          </div>
+          <ul style={{listStyle:'none', padding:0, margin:0, display:'flex', flexDirection:'column', gap:'0.45rem'}}>
+            {recentVotes.map((v, i) => (
+              <li key={`${v.feed_card_id}-${i}`} style={{
+                background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'0.55rem',
+                padding:'0.5rem 0.6rem', display:'flex', flexDirection:'column', gap:'0.25rem',
+              }}>
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:'0.4rem'}}>
+                  <span style={{fontSize:'0.72rem', fontWeight:800, color:'#0f172a'}}>
+                    {v.bill_number || 'Bill'} · {v.official_name || 'Unknown'}
+                  </span>
+                  <UserVotePill position={v.position} />
+                </div>
+                {v.title && (
+                  <div style={{fontSize:'0.7rem', color:'#475569', lineHeight:1.4, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
+                    {v.title}
+                  </div>
+                )}
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:'0.62rem', color:'#94a3b8'}}>
+                  <span>{v.created_at ? new Date(v.created_at).toLocaleDateString() : ''}</span>
+                  {v.source_url && (
+                    <a href={v.source_url} target="_blank" rel="noopener noreferrer" style={{color:'#6366f1', textDecoration:'none', fontWeight:700}}>
+                      View →
+                    </a>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* ── Pinned Posts ────────────────────────────────────────────────── */}
       {pinnedPosts.length > 0 && (
@@ -7237,6 +7460,121 @@ function SponsoredBillsDropdown({ officialId, viewBillsUrl }) {
   );
 }
 
+// Parse "Member, Senate Foreign Relations" / "Chairman of …" / "Ranking Member …"
+// out of a free-form description string. Returns null when no role keyword found.
+function parseCommitteeRole(text) {
+  if (!text) return null;
+  const t = String(text);
+  if (/ranking\s+member/i.test(t)) return 'Ranking Member';
+  if (/\bchair(man|woman|person)?\b/i.test(t)) return 'Chair';
+  if (/\bvice\s+chair/i.test(t)) return 'Vice Chair';
+  if (/\bmember\b/i.test(t)) return 'Member';
+  return null;
+}
+
+function CommitteeDropdown({ officialId }) {
+  const [expanded, setExpanded] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [items, setItems] = useState(null);
+  const [error, setError] = useState(null);
+
+  const toggle = () => {
+    const next = !expanded;
+    setExpanded(next);
+    if (next && items === null && !loading && isFetchableId(officialId)) {
+      setLoading(true);
+      setError(null);
+      fetchOfficialLegislativeActivity(officialId, { activityType: 'committee', limit: 50, offset: 0 })
+        .then((res) => {
+          if (res && res.success && res.data) {
+            const rows = Array.isArray(res.data.items) ? res.data.items : [];
+            // Dedupe by bill_number (committee code) or title
+            const seen = new Set();
+            const unique = rows.filter((c) => {
+              const k = c.bill_number || c.title || '';
+              if (seen.has(k)) return false;
+              seen.add(k);
+              return true;
+            });
+            setItems(unique);
+          } else {
+            setError((res && res.error) || 'Failed to load committees');
+            setItems([]);
+          }
+        })
+        .finally(() => setLoading(false));
+    }
+  };
+
+  return (
+    <div style={{marginTop:'0.4rem'}}>
+      <button
+        type="button"
+        onClick={toggle}
+        style={{
+          display:'flex', alignItems:'center', gap:'0.3rem',
+          background:'transparent', border:'none', padding:0,
+          color:'#6366f1', fontSize:'0.7rem', fontWeight:700,
+          cursor:'pointer', textTransform:'uppercase', letterSpacing:'0.04em',
+        }}
+      >
+        <span aria-hidden="true">{expanded ? '▾' : '▸'}</span>
+        {expanded ? 'Hide committees' : 'View committees'}
+      </button>
+
+      {expanded && (
+        <div style={{marginTop:'0.45rem', display:'flex', flexDirection:'column', gap:'0.4rem'}}>
+          {loading && <div style={{fontSize:'0.7rem', color:'#64748b'}}>Loading committees…</div>}
+          {!loading && error && <div style={{fontSize:'0.7rem', color:'#b91c1c'}}>Couldn't load committees: {error}</div>}
+          {!loading && !error && items && items.length === 0 && (
+            <div style={{fontSize:'0.7rem', color:'#64748b'}}>No committee assignments found.</div>
+          )}
+          {!loading && !error && items && items.length > 0 && (
+            <ul style={{listStyle:'none', padding:0, margin:0, display:'flex', flexDirection:'column', gap:'0.4rem'}}>
+              {items.map((c, i) => {
+                const meta = lookupCommitteeMeta(c.bill_number, c.title);
+                const role = parseCommitteeRole(c.description) || parseCommitteeRole(c.title);
+                const desc = c.description && c.description !== meta.blurb ? c.description : meta.blurb;
+                return (
+                  <li key={`${c.id ?? c.bill_number ?? 'cmte'}-${i}`} style={{
+                    background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'0.55rem',
+                    padding:'0.5rem 0.6rem', display:'flex', flexDirection:'column', gap:'0.2rem',
+                  }}>
+                    <div style={{display:'flex', alignItems:'baseline', gap:'0.4rem', flexWrap:'wrap'}}>
+                      <span style={{fontSize:'0.78rem', fontWeight:800, color:'#0f172a'}}>{meta.name}</span>
+                      {c.chamber && (
+                        <span style={{fontSize:'0.58rem', fontWeight:700, color:'#475569', background:'#e2e8f0', padding:'0.08rem 0.4rem', borderRadius:'999px', textTransform:'uppercase', letterSpacing:'0.04em'}}>
+                          {c.chamber}
+                        </span>
+                      )}
+                      {role && (
+                        <span style={{fontSize:'0.58rem', fontWeight:700, color:'#6366f1', background:'#eef2ff', padding:'0.08rem 0.4rem', borderRadius:'999px', textTransform:'uppercase', letterSpacing:'0.04em'}}>
+                          {role}
+                        </span>
+                      )}
+                    </div>
+                    {desc && (
+                      <div style={{fontSize:'0.7rem', color:'#475569', lineHeight:1.4}}>{desc}</div>
+                    )}
+                    {c.source_url && (
+                      <a href={c.source_url} target="_blank" rel="noopener noreferrer" style={{fontSize:'0.66rem', fontWeight:700, color:'#6366f1', textDecoration:'none'}}>
+                        View →
+                      </a>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          <div style={{fontSize:'0.7rem', color:'#94a3b8', fontStyle:'italic', textAlign:'center'}}>
+            Showing available committee data
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MetricCard({ metric, officialId }) {
   const rating = metric.rating || 'no_data';
   const style = METRIC_RATING_STYLES[rating] || METRIC_RATING_STYLES.no_data;
@@ -7246,6 +7584,7 @@ function MetricCard({ metric, officialId }) {
   const valueText = metric.value || '';
   const unitText = metric.unit ? ` ${metric.unit}` : '';
   const isBillsSponsored = metric.key === 'bills_sponsored';
+  const isCommittees = metric.key === 'committee_assignments';
 
   return (
     <div style={{
@@ -7302,6 +7641,9 @@ function MetricCard({ metric, officialId }) {
 
       {isBillsSponsored && !isNoData && (
         <SponsoredBillsDropdown officialId={officialId} viewBillsUrl={metric.view_bills_url} />
+      )}
+      {isCommittees && !isNoData && (
+        <CommitteeDropdown officialId={officialId} />
       )}
 
       <div style={{fontSize:'0.62rem', color:'#94a3b8', marginTop:'auto', paddingTop:'0.25rem'}}>
@@ -7870,6 +8212,49 @@ function BottomNav({ active, onChange, unreadNotifs = 0 }) {
   );
 }
 
+// Dismissible "Take the typology quiz" CTA shown above the feed. Hidden
+// once the user has a stored result OR has dismissed the card this session.
+function FeedQuizCTA({ onStart }) {
+  const [stored, setStored] = useState(() => getStoredTypology());
+  const [dismissed, setDismissed] = useState(() => {
+    try { return localStorage.getItem('politiscore_quiz_cta_dismissed') === '1'; } catch (_) { return false; }
+  });
+  if (stored || dismissed) return null;
+  return (
+    <div style={{
+      margin:'0.85rem 1rem 0', padding:'0.85rem 1rem',
+      background:'linear-gradient(135deg, #eef2ff, #ffffff)',
+      border:'1px solid #c7d2fe', borderRadius:'0.85rem',
+      display:'flex', alignItems:'center', gap:'0.85rem', boxShadow:'0 1px 2px rgba(15,23,42,0.04)',
+    }}>
+      <div style={{flex:1, minWidth:0}}>
+        <div style={{fontSize:'0.7rem', fontWeight:800, letterSpacing:'0.06em', color:'#4338ca', textTransform:'uppercase'}}>
+          New
+        </div>
+        <div style={{fontSize:'0.95rem', fontWeight:800, color:'#0f172a', marginTop:'0.15rem'}}>
+          What's your political typology?
+        </div>
+        <div style={{fontSize:'0.78rem', color:'#475569', marginTop:'0.15rem'}}>
+          Take a 10-question quiz and see how your reps align.
+        </div>
+      </div>
+      <button
+        onClick={onStart}
+        style={{padding:'0.55rem 0.9rem', borderRadius:10, border:'none', background:'#6366f1', color:'#fff', fontWeight:800, cursor:'pointer', whiteSpace:'nowrap'}}
+      >
+        Take quiz →
+      </button>
+      <button
+        onClick={() => { try { localStorage.setItem('politiscore_quiz_cta_dismissed', '1'); } catch (_) {} setDismissed(true); }}
+        title="Dismiss"
+        style={{background:'transparent', border:'none', color:'#94a3b8', fontSize:'1.1rem', cursor:'pointer', padding:'0.25rem 0.4rem'}}
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
 // ─── ROOT ────────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -7948,8 +8333,31 @@ React.useEffect(() => {
   const openProfile = (o) => setProfile(o);
   const changeTab = (t) => { setTab(t); setProfile(null); };
 
+  // Live document.title so browser tabs / OS task switchers reflect context.
+  React.useEffect(() => {
+    if (profile?.name) {
+      document.title = `${profile.name} — PolitiScore`;
+    } else {
+      const labels = { feed:'Feed', explore:'Explore', notifications:'Activity', profile:'My Profile' };
+      document.title = `${labels[tab] || ''} — PolitiScore`.trim().replace(/^—\s*/, '');
+    }
+  }, [profile, tab]);
+
+  // App-shell typology quiz overlay (BackendTypologyQuiz). Triggered from the
+  // feed CTA below; closes back to whatever the user was looking at.
+  const [showQuizOverlay, setShowQuizOverlay] = useState(false);
+
   if (!user) return <Login onAuth={(u, z) => { localStorage.setItem('politiscore_user', JSON.stringify(u)); setUser(u); if (z) setZip(z); }} />;
   if (!zip) return <ZipOnboarding onComplete={setZip} />;
+  if (showQuizOverlay) {
+    return (
+      <div className="app-shell">
+        <main className="app-main" style={{paddingBottom:'1rem'}}>
+          <BackendTypologyQuiz onClose={() => setShowQuizOverlay(false)} />
+        </main>
+      </div>
+    );
+  }
 
   const tabTitles = { feed:'PolitiScore', explore:'Explore', notifications:'Activity', profile:'My Profile' };
   const totalLocations = 1 + followedLocations.length;
@@ -7999,10 +8407,15 @@ React.useEffect(() => {
           <OfficialProfile official={profile} onBack={() => setProfile(null)} likes={likes} onLike={toggleLike} zip={zip} />
         ) : (
           <>
-            {tab==='feed' && <FeedV1 zip={zip} userName={userName} />}
+            {tab==='feed' && (
+              <>
+                <FeedQuizCTA onStart={() => setShowQuizOverlay(true)} />
+                <FeedV1 zip={zip} userName={userName} />
+              </>
+            )}
 {tab==='explore' && <ExploreTab onProfile={openProfile} liveOfficials={liveOfficials} zip={zip} countyMetrics={countyMetrics} />}
             {tab==='notifications' && <NotificationsTab onProfile={openProfile} readNotifIds={readNotifIds} onReadNotif={id => setReadNotifIds(prev => prev.includes(id) ? prev : [...prev, id])} />}
-            {tab==='profile' && <MyProfileTab zip={zip} userName={userName} userPhoto={userPhoto} onPhotoChange={setUserPhoto} postsRead={readPostIds.size} likes={likes} followedLocations={followedLocations} onManageLocations={() => setShowLocModal(true)} pollVotesCount={pollVotes.length} pinnedPosts={pinnedPosts} onUnpin={(id) => setPinnedPosts(prev => prev.filter(p => p.id !== id))} onLogout={handleLogout} liveOfficials={liveOfficials} liveFeedItems={liveFeedItems} />}
+            {tab==='profile' && <MyProfileTab zip={zip} userName={userName} userPhoto={userPhoto} onPhotoChange={setUserPhoto} postsRead={readPostIds.size} likes={likes} followedLocations={followedLocations} onManageLocations={() => setShowLocModal(true)} pollVotesCount={pollVotes.length} pinnedPosts={pinnedPosts} onUnpin={(id) => setPinnedPosts(prev => prev.filter(p => p.id !== id))} onLogout={handleLogout} liveOfficials={liveOfficials} liveFeedItems={liveFeedItems} onTakeQuiz={() => setShowQuizOverlay(true)} />}
           </>
         )}
       </main>
