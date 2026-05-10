@@ -8761,14 +8761,7 @@ React.useEffect(() => {
       {!profile && (
         <header className="top-bar">
           <div className="tb-left">
-            {tab === 'feed' ? (
-              <PolitiCardLogo height={28} />
-            ) : (
-              <>
-                <PolitiCardIcon size={22} />
-                <span className="tb-title">{tabTitles[tab]}</span>
-              </>
-            )}
+            <PolitiCardLogo height={28} />
           </div>
           <div className="tb-right">
             <button className="tb-add-location" onClick={() => setShowLocModal(true)} title="Follow another location">
