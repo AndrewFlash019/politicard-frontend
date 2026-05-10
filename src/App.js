@@ -5,6 +5,13 @@ import { formatStatus, formatResult } from './utils';
 import BackendTypologyQuiz, { getStoredTypology, clearStoredTypology } from './pages/TypologyQuiz';
 import { ResetPasswordScreen } from './pages/PasswordRecovery';
 import ErrorBoundary from './ErrorBoundary';
+import PrivacyPolicy from './pages/PrivacyPolicy';
+import TermsOfService from './pages/TermsOfService';
+import Waitlist from './pages/Waitlist';
+import LaunchChecklist from './pages/LaunchChecklist';
+import CookieConsent from './components/CookieConsent';
+import InstallPrompt from './components/InstallPrompt';
+import { analytics } from './lib/analytics';
 import FeedV1 from './feed/FeedV1';
 import Login from './Login';
 
@@ -8662,9 +8669,11 @@ React.useEffect(() => {
   React.useEffect(() => {
     if (profile?.name) {
       document.title = `${profile.name} — PolitiScore`;
+      analytics.trackProfileView(profile.id);
     } else {
       const labels = { feed:'Feed', explore:'Explore', notifications:'Activity', profile:'My Profile' };
       document.title = `${labels[tab] || ''} — PolitiScore`.trim().replace(/^—\s*/, '');
+      analytics.trackPageView(tab);
     }
   }, [profile, tab]);
 
@@ -8678,11 +8687,24 @@ React.useEffect(() => {
     catch (_) { return 'welcome'; }
   });
 
-  // Honor a /reset-password?token=… link before any auth state.
+  // Public static routes (resolve before any auth/onboarding gate).
+  const path = typeof window !== 'undefined' ? window.location.pathname : '/';
   const isResetRoute = typeof window !== 'undefined'
-    && (window.location.pathname.startsWith('/reset-password') || new URLSearchParams(window.location.search).get('reset') === '1');
+    && (path.startsWith('/reset-password') || new URLSearchParams(window.location.search).get('reset') === '1');
   if (isResetRoute) {
     return <ResetPasswordScreen onBackToLogin={() => { window.location.href = '/'; }} />;
+  }
+  if (path.startsWith('/privacy')) {
+    return <PrivacyPolicy onBack={() => { window.location.href = '/'; }} />;
+  }
+  if (path.startsWith('/terms')) {
+    return <TermsOfService onBack={() => { window.location.href = '/'; }} />;
+  }
+  if (path.startsWith('/waitlist')) {
+    return <Waitlist defaultZip={zip || ''} onClose={() => { window.location.href = '/'; }} />;
+  }
+  if (path.startsWith('/internal/launch-checklist')) {
+    return <LaunchChecklist />;
   }
 
   if (!user) return <Login onAuth={(u, z) => { localStorage.setItem('politiscore_user', JSON.stringify(u)); setUser(u); if (z) setZip(z); }} />;
@@ -8765,6 +8787,7 @@ React.useEffect(() => {
           </div>
         </header>
       )}
+      <InstallPrompt />
       <main className="app-main">
         <ErrorBoundary>
         {profile ? (
@@ -8784,7 +8807,16 @@ React.useEffect(() => {
         )}
         </ErrorBoundary>
       </main>
+      <footer style={{padding:'1.25rem 1rem 5rem', textAlign:'center', fontSize:'0.72rem', color:'#94a3b8'}}>
+        © 2026 PolitiScore ·{' '}
+        <a href="/privacy" style={{color:'#6366f1', textDecoration:'none'}}>Privacy</a>
+        {' '}·{' '}
+        <a href="/terms"   style={{color:'#6366f1', textDecoration:'none'}}>Terms</a>
+        {' '}·{' '}
+        <a href="mailto:hello@politiscore.com" style={{color:'#6366f1', textDecoration:'none'}}>Contact</a>
+      </footer>
       <BottomNav active={tab} onChange={changeTab} unreadNotifs={unreadNotifCount} />
+      <CookieConsent onLearnMore={() => { window.location.href = '/privacy'; }} />
     </div>
   );
 }

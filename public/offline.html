@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>You're offline — PolitiScore</title>
+    <link rel="manifest" href="/manifest.json">
+    <style>
+      html, body {
+        margin: 0; padding: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+        background: linear-gradient(135deg, #0b1f4f 0%, #1a1a2e 50%, #2d1b3d 100%);
+        color: #ffffff;
+        min-height: 100vh;
+        display: flex; align-items: center; justify-content: center;
+      }
+      .card {
+        max-width: 420px; padding: 2rem 1.75rem; text-align: center;
+      }
+      h1 { font-size: 1.4rem; font-weight: 800; margin: 0 0 0.5rem; }
+      p { color: rgba(255,255,255,0.75); font-size: 0.95rem; line-height: 1.55; }
+      button {
+        margin-top: 1rem; padding: 0.85rem 1.4rem; border-radius: 12px;
+        border: none; font-weight: 800; font-size: 1rem; cursor: pointer;
+        background: linear-gradient(135deg, #2563eb, #7c3aed); color: #fff;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📡</div>
+      <h1>You're offline</h1>
+      <p>PolitiScore needs a connection to load your representatives. Once you're back online, tap below to retry.</p>
+      <button onclick="location.reload()">Try again</button>
+    </div>
+  </body>
+</html>

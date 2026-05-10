@@ -564,6 +564,40 @@ export async function fetchOfficialAlignment(officialId, userId) {
   }
 }
 
+// ─── Waitlist ────────────────────────────────────────────────────────────────
+export async function postWaitlist({ email, zipCode, source }) {
+  try {
+    const r = await fetch(`${BASE_URL}/waitlist`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email,
+        zip_code: zipCode || null,
+        source: source || 'organic',
+      }),
+    });
+    if (!r.ok) {
+      let detail = '';
+      try { detail = (await r.json()).detail || ''; } catch (_) {}
+      throw new Error(detail || `Backend returned ${r.status}`);
+    }
+    return { success: true, data: await r.json() };
+  } catch (err) {
+    return { success: false, error: String(err.message || err) };
+  }
+}
+
+// ─── Health (used by launch checklist page) ──────────────────────────────────
+export async function fetchHealth() {
+  try {
+    const r = await fetch(`${BASE_URL}/health`);
+    if (!r.ok) throw new Error(`Backend returned ${r.status}`);
+    return { success: true, data: await r.json() };
+  } catch (err) {
+    return { success: false, error: String(err.message || err) };
+  }
+}
+
 // ─── Password recovery ──────────────────────────────────────────────────────
 export async function postForgotPassword(email) {
   try {
