@@ -93,7 +93,7 @@ function PolitiCardLogo({ height = 32 }) {
           <stop offset="100%" stopColor="#c94040"/>
         </linearGradient>
       </defs>
-      <text x="0" y="56" fontFamily="Georgia, 'Times New Roman', serif" fontSize="60" fontWeight="700" fill="url(#nm)" letterSpacing="-2">PolitiCard</text>
+      <text x="0" y="56" fontFamily="Georgia, 'Times New Roman', serif" fontSize="60" fontWeight="700" fill="url(#nm)" letterSpacing="-2">PolitiScore</text>
       <circle cx="330" cy="12" r="8.5" fill="#6b9fdf" opacity="0.9"/>
       <circle cx="352" cy="7"  r="6.5" fill="#9b6fd4" opacity="0.75"/>
       <circle cx="371" cy="3"  r="4.5" fill="#c94040" opacity="0.7"/>
@@ -1469,7 +1469,7 @@ function PublicRecordDrawer({ candidate, onClose }) {
           </div>
         )}
 
-        <p className="pr-disclaimer">All information sourced from public records, official filings, and published media. PolitiCard does not verify candidate statements for accuracy.</p>
+        <p className="pr-disclaimer">All information sourced from public records, official filings, and published media. PolitiScore does not verify candidate statements for accuracy.</p>
       </div>
     </div>
   );
@@ -4999,7 +4999,7 @@ function VoterResourcesPanel({ zip }) {
       </div>
 
       <p className="voter-disclaimer">
-        All information sourced from Florida Division of Elections and Flagler County Supervisor of Elections official websites. PolitiCard does not endorse any candidate, party, or ballot position. Deadlines may vary — always verify with your county supervisor of elections.
+        All information sourced from Florida Division of Elections and Flagler County Supervisor of Elections official websites. PolitiScore does not endorse any candidate, party, or ballot position. Deadlines may vary — always verify with your county supervisor of elections.
       </p>
     </div>
   );
@@ -7828,7 +7828,7 @@ React.useEffect(() => {
   if (!user) return <Login onAuth={(u, z) => { localStorage.setItem('politiscore_user', JSON.stringify(u)); setUser(u); if (z) setZip(z); }} />;
   if (!zip) return <ZipOnboarding onComplete={setZip} />;
 
-  const tabTitles = { feed:'PolitiCard', explore:'Explore', notifications:'Activity', profile:'My Profile' };
+  const tabTitles = { feed:'PolitiScore', explore:'Explore', notifications:'Activity', profile:'My Profile' };
   const totalLocations = 1 + followedLocations.length;
 
   return (

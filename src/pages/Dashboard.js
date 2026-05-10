@@ -24,7 +24,7 @@ function Dashboard() {
   return (
     <div style={{ minHeight: '100vh', background: '#1a1a2e', color: 'white', padding: '20px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
-        <h1>PolitiCard Dashboard</h1>
+        <h1>PolitiScore Dashboard</h1>
         <button onClick={handleLogout} style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', background: '#e94560', color: 'white', cursor: 'pointer' }}>
           Logout
         </button>

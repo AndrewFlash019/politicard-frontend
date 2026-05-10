@@ -82,44 +82,47 @@ function WelcomeBack({ userName, lastVisitIso, streak }) {
 // Stream card — bills, votes, committees, local Legistar — one shape
 // ---------------------------------------------------------------------------
 
-// Plain-English headline. Vote rows: "Official voted YEA on summary".
-// Bill rows: "Official sponsored BILL: summary". Falls back to title.
-function buildPlainEnglishHeadline(item) {
-  const summary = (item.plain_english_summary && item.plain_english_summary.trim())
-    || (item.title && item.title.trim())
-    || '(no summary)';
-  const shortSummary = summary.length > 140 ? summary.slice(0, 140).trimEnd() + '…' : summary;
+// Short, scannable headline: "<Who> voted YEA on <Bill#>".
+// Falls back to "acted on" when vote_position is missing/null.
+function buildShortTitle(item) {
   const who = item.official_name || 'Official';
-  if (item.activity_type === 'vote' && item.vote_position) {
-    const pos = item.vote_position.toLowerCase();
-    let display = item.vote_position.toUpperCase();
-    if (pos.startsWith('y')) display = 'YEA';
-    else if (pos.startsWith('n') && !pos.startsWith('not')) display = 'NAY';
-    return `${who} voted ${display} on ${shortSummary}`;
+  const bill = item.bill_number ? ` on ${item.bill_number}` : '';
+  if (item.activity_type === 'vote') {
+    if (item.vote_position) {
+      const pos = item.vote_position.toLowerCase();
+      let display = item.vote_position.toUpperCase();
+      if (pos.startsWith('y')) display = 'YEA';
+      else if (pos.startsWith('n') && !pos.startsWith('not')) display = 'NAY';
+      return `${who} voted ${display}${bill}`;
+    }
+    return `${who} acted${bill}`;
   }
   if (item.activity_type === 'bill_sponsored' || item.activity_type === 'bill_cosponsored') {
     const verb = item.activity_type === 'bill_cosponsored' ? 'cosponsored' : 'sponsored';
-    return item.bill_number
-      ? `${who} ${verb} ${item.bill_number}: ${shortSummary}`
-      : `${who} ${verb}: ${shortSummary}`;
+    return item.bill_number ? `${who} ${verb} ${item.bill_number}` : `${who} ${verb} a bill`;
   }
-  return summary;
+  return `${who} acted${bill}`;
+}
+
+// Bill name: prefer the official title, fall back to description.
+function buildBillName(item) {
+  const t = (item.title && item.title.trim()) || (item.description && item.description.trim()) || '';
+  return t;
 }
 
 function StreamCard({ item, onVote }) {
   const [pending, setPending] = useState(false);
   const [myPosition, setMyPosition] = useState(null);
+  const [expanded, setExpanded] = useState(false);
   const [counts, setCounts] = useState({
     support: Number(item.support_count) || 0,
     oppose: Number(item.oppose_count) || 0,
     neutral: Number(item.neutral_count) || 0,
   });
 
-  const headline = buildPlainEnglishHeadline(item);
-  const desc = (item.description && item.description.trim()) || '';
-  const supportingDetail =
-    desc && desc !== (item.plain_english_summary || '').trim() && desc !== (item.title || '').trim()
-      ? desc : null;
+  const shortTitle = buildShortTitle(item);
+  const billName = buildBillName(item);
+  const fullSummary = (item.plain_english_summary && item.plain_english_summary.trim()) || '';
 
   const lvl = levelBadge(item.official_level);
   const icon = activityIcon(item.activity_type, item.vote_position);
@@ -177,15 +180,40 @@ function StreamCard({ item, onVote }) {
             )}
             {item.bill_number && <span className="fcv1-stream-bill">{item.bill_number}</span>}
           </div>
-          <h3 className="fcv1-stream-title">{headline}</h3>
+          <h3 className="fcv1-stream-title">{shortTitle}</h3>
+          {billName && <div className="fcv1-stream-billname" title={billName}>{billName}</div>}
+          {fullSummary && (
+            <button
+              type="button"
+              className="fcv1-stream-disclose-btn"
+              onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
+              aria-expanded={expanded}
+            >
+              {expanded ? 'Hide summary ▲' : 'Read summary ▼'}
+            </button>
+          )}
+          <div
+            className={`fcv1-stream-summary-panel${expanded ? ' is-open' : ''}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {fullSummary && <p className="fcv1-stream-summary-text">{fullSummary}</p>}
+            {item.source_url && (
+              <a
+                href={item.source_url}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="fcv1-stream-readbill-link"
+              >
+                Read full bill →
+              </a>
+            )}
+          </div>
           <div className="fcv1-stream-meta-bot">
             {when && <span className="fcv1-stream-time">{when}</span>}
             {item.status && <span className="fcv1-stream-status">· {item.status.replace(/_/g, ' ')}</span>}
           </div>
         </div>
       </div>
-
-      {supportingDetail && <p className="fcv1-stream-summary">{supportingDetail}</p>}
 
       <div className="fcv1-stream-vote-row" onClick={(e) => e.stopPropagation()}>
         <button
