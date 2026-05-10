@@ -1,11 +1,16 @@
 import React, { useState } from 'react';
 import { registerUser, loginUser } from './services/api';
+import { ForgotPasswordScreen } from './pages/PasswordRecovery';
 
 export default function Login({ onAuth }) {
-  const [mode, setMode] = useState('login'); // 'login' | 'register'
+  const [mode, setMode] = useState('login'); // 'login' | 'register' | 'forgot'
   const [form, setForm] = useState({ email: '', password: '', full_name: '', zip_code: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  if (mode === 'forgot') {
+    return <ForgotPasswordScreen onBack={() => { setMode('login'); setError(''); }} />;
+  }
 
   const update = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
@@ -134,6 +139,16 @@ export default function Login({ onAuth }) {
           <button type="submit" style={styles.btn} disabled={loading}>
             {loading ? 'Please wait...' : mode === 'login' ? 'Log In →' : 'Create Account →'}
           </button>
+
+          {mode === 'login' && (
+            <button
+              type="button"
+              onClick={() => { setMode('forgot'); setError(''); }}
+              style={styles.forgotLink}
+            >
+              Forgot password?
+            </button>
+          )}
         </form>
 
         <p style={styles.note}>Free · No ads · No data selling</p>
@@ -250,5 +265,11 @@ const styles = {
     color: 'rgba(255,255,255,0.35)',
     fontSize: '0.78rem',
     margin: 0,
+  },
+  forgotLink: {
+    background: 'transparent', border: 'none',
+    color: 'rgba(255,255,255,0.6)', fontSize: '0.82rem',
+    textDecoration: 'underline', cursor: 'pointer',
+    padding: '0.25rem 0', alignSelf: 'center',
   },
 };

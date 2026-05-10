@@ -1,8 +1,10 @@
 import React, { useState, useRef } from 'react';
 import './App.css';
-import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip, fetchOfficialLegislation, fetchOfficialMetrics, fetchOfficialDonors, fetchOfficialFundersByIndustry, fetchOfficialSpending, fetchOfficialExpenditures, fetchOfficialScorecard, fetchOfficialCommittees, fetchUserEngagement, fetchOfficialAlignment, fetchOfficialLegislativeActivity, fetchOfficialMyVotes, postConstituentVote, fetchUserRecentVotes } from './services/api';
+import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip, fetchOfficialLegislation, fetchOfficialMetrics, fetchOfficialDonors, fetchOfficialFundersByIndustry, fetchOfficialSpending, fetchOfficialExpenditures, fetchOfficialScorecard, fetchOfficialCommittees, fetchUserEngagement, fetchOfficialAlignment, fetchOfficialLegislativeActivity, fetchOfficialMyVotes, postConstituentVote, fetchUserRecentVotes, fetchCrimeTrend, fetchMisconductCases, postOfficialFeedback } from './services/api';
 import { formatStatus, formatResult } from './utils';
 import BackendTypologyQuiz, { getStoredTypology, clearStoredTypology } from './pages/TypologyQuiz';
+import { ResetPasswordScreen } from './pages/PasswordRecovery';
+import ErrorBoundary from './ErrorBoundary';
 import FeedV1 from './feed/FeedV1';
 import Login from './Login';
 
@@ -1090,6 +1092,58 @@ function OfficialAvatar({ official, size = 44, radius = 12, fontSize = '1.3rem' 
 }
 
 // ─── ONBOARDING ─────────────────────────────────────────────────────────────
+
+function WelcomeOnboarding({ onContinue }) {
+  return (
+    <div style={{minHeight:'100vh', background:'linear-gradient(135deg, #0b1f4f 0%, #1a1a2e 50%, #2d1b3d 100%)', display:'flex', alignItems:'center', justifyContent:'center', padding:'1rem', textAlign:'center'}}>
+      <div style={{maxWidth:'420px', display:'flex', flexDirection:'column', alignItems:'center', gap:'1.4rem'}}>
+        <PolitiCardLogo height={42} />
+        <h1 style={{margin:0, color:'#fff', fontSize:'1.6rem', fontWeight:800, lineHeight:1.3, letterSpacing:'-0.01em'}}>
+          Welcome to PolitiScore
+        </h1>
+        <p style={{margin:0, color:'rgba(255,255,255,0.75)', fontSize:'0.95rem', lineHeight:1.55}}>
+          Democracy starts with knowing who represents you. Enter your ZIP and we'll show you every official elected to serve your community.
+        </p>
+        <button
+          onClick={onContinue}
+          style={{padding:'0.95rem 1.4rem', borderRadius:12, border:'none', background:'linear-gradient(135deg, #2563eb, #7c3aed)', color:'#fff', fontWeight:800, fontSize:'1rem', cursor:'pointer'}}
+        >
+          Enter your ZIP code →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function PostZipQuizPrompt({ onTakeQuiz, onSkip }) {
+  return (
+    <div style={{minHeight:'100vh', background:'linear-gradient(135deg, #0b1f4f 0%, #1a1a2e 50%, #2d1b3d 100%)', display:'flex', alignItems:'center', justifyContent:'center', padding:'1rem', textAlign:'center'}}>
+      <div style={{maxWidth:'420px', display:'flex', flexDirection:'column', alignItems:'center', gap:'1.4rem'}}>
+        <PolitiCardIcon size={48} />
+        <h1 style={{margin:0, color:'#fff', fontSize:'1.4rem', fontWeight:800, lineHeight:1.3, letterSpacing:'-0.01em'}}>
+          Take the Civic Typology Quiz
+        </h1>
+        <p style={{margin:0, color:'rgba(255,255,255,0.75)', fontSize:'0.95rem', lineHeight:1.55}}>
+          10 quick questions. See how your views align with the officials who represent you.
+        </p>
+        <div style={{display:'flex', gap:'0.6rem', flexDirection:'column', width:'100%'}}>
+          <button
+            onClick={onTakeQuiz}
+            style={{padding:'0.85rem 1.2rem', borderRadius:12, border:'none', background:'linear-gradient(135deg, #2563eb, #7c3aed)', color:'#fff', fontWeight:800, fontSize:'0.95rem', cursor:'pointer'}}
+          >
+            Take the quiz →
+          </button>
+          <button
+            onClick={onSkip}
+            style={{padding:'0.7rem 1.2rem', borderRadius:12, border:'1px solid rgba(255,255,255,0.2)', background:'transparent', color:'rgba(255,255,255,0.75)', fontWeight:700, fontSize:'0.85rem', cursor:'pointer'}}
+          >
+            Skip for now
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function ZipOnboarding({ onComplete }) {
   const [zip, setZip] = useState('');
@@ -3907,11 +3961,12 @@ function CommissionerScorecard({ officialId }) {
   );
 }
 
-function ExploreBillsPanel({ zip }) {
+function ExploreBillsPanel({ zip, onProfile, liveOfficials = [] }) {
   const [items, setItems] = useState(null);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [pageSize, setPageSize] = useState(50);
 
   React.useEffect(() => {
     if (!zip) return;
@@ -3928,6 +3983,12 @@ function ExploreBillsPanel({ zip }) {
   if (loading) return <div style={{padding:'1.5rem 1rem', color:'#64748b'}}>Loading bills…</div>;
   if (!items || items.length === 0) return <div style={{padding:'1.5rem 1rem', color:'#64748b'}}>No bills found for ZIP {zip}.</div>;
 
+  // Index officials by name for "View official →" navigation + party badge
+  const officialByName = new Map();
+  (liveOfficials || []).forEach((o) => {
+    if (o?.name) officialByName.set(o.name.toLowerCase().trim(), o);
+  });
+
   const q = query.trim().toLowerCase();
   const matches = (b) => {
     const haystack = `${b.title || ''} ${b.body || ''} ${b.bill_number || ''} ${b.official_name || ''}`.toLowerCase();
@@ -3937,58 +3998,100 @@ function ExploreBillsPanel({ zip }) {
       if (statusFilter === 'in_committee' && !/committee/.test(s)) return false;
       if (statusFilter === 'passed' && !/pass/.test(s)) return false;
       if (statusFilter === 'failed' && !/fail|reject/.test(s)) return false;
+      if (statusFilter === 'introduced' && !/introduc/.test(s)) return false;
     }
     return true;
   };
-  const filtered = items.filter(matches).slice(0, 50);
+  const filtered = items.filter(matches);
+  const visible = filtered.slice(0, pageSize);
+
+  const STATUSES = [
+    { id:'all',          label:'All' },
+    { id:'in_committee', label:'In Committee' },
+    { id:'passed',       label:'Passed' },
+    { id:'failed',       label:'Failed' },
+    { id:'introduced',   label:'Introduced' },
+  ];
 
   return (
     <div style={{padding:'0.5rem 1rem 1.5rem'}}>
-      <div style={{display:'flex', gap:'0.5rem', flexWrap:'wrap', marginBottom:'0.85rem'}}>
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search bills, officials, keywords…"
-          style={{flex:1, minWidth:0, padding:'0.55rem 0.75rem', borderRadius:10, border:'1px solid #e2e8f0', fontSize:'0.85rem'}}
-        />
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          style={{padding:'0.55rem 0.75rem', borderRadius:10, border:'1px solid #e2e8f0', background:'#fff', fontSize:'0.85rem'}}
-        >
-          <option value="all">All statuses</option>
-          <option value="in_committee">In Committee</option>
-          <option value="passed">Passed</option>
-          <option value="failed">Failed</option>
-        </select>
+      <input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search bills, officials, keywords…"
+        style={{width:'100%', boxSizing:'border-box', padding:'0.6rem 0.85rem', borderRadius:10, border:'1px solid #e2e8f0', fontSize:'0.9rem', marginBottom:'0.6rem'}}
+      />
+      <div style={{display:'flex', gap:'0.35rem', flexWrap:'wrap', marginBottom:'0.85rem'}}>
+        {STATUSES.map((s) => {
+          const active = statusFilter === s.id;
+          return (
+            <button
+              key={s.id}
+              onClick={() => setStatusFilter(s.id)}
+              style={{
+                padding:'0.35rem 0.7rem', borderRadius:'999px', cursor:'pointer',
+                border: `1px solid ${active ? '#6366f1' : '#e2e8f0'}`,
+                background: active ? '#eef2ff' : '#fff',
+                color: active ? '#4338ca' : '#475569',
+                fontWeight: active ? 800 : 600, fontSize:'0.78rem',
+              }}
+            >
+              {s.label}
+            </button>
+          );
+        })}
       </div>
       <div style={{fontSize:'0.7rem', color:'#94a3b8', marginBottom:'0.6rem'}}>
-        Showing {filtered.length} of {items.length} bills
+        Showing {visible.length} of {filtered.length} bills
       </div>
       <div style={{display:'flex', flexDirection:'column', gap:'0.5rem'}}>
-        {filtered.map((b) => (
-          <div key={b.id} style={{background:'#ffffff', border:'1px solid #e2e8f0', borderRadius:'0.65rem', padding:'0.7rem 0.85rem'}}>
-            <div style={{display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:'0.4rem'}}>
-              <span style={{fontSize:'0.78rem', fontWeight:800, color:'#0f172a'}}>{b.bill_number || 'Bill'}</span>
-              {(b.status || b.result) && (
-                <span style={{fontSize:'0.6rem', fontWeight:700, color:'#475569', background:'#f1f5f9', padding:'0.15rem 0.45rem', borderRadius:'999px', letterSpacing:'0.02em'}}>
-                  {formatResult(b.result, b.status)}
-                </span>
+        {visible.map((b) => {
+          const off = b.official_name ? officialByName.get(b.official_name.toLowerCase().trim()) : null;
+          return (
+            <div key={b.id} style={{background:'#ffffff', border:'1px solid #e2e8f0', borderRadius:'0.65rem', padding:'0.7rem 0.85rem'}}>
+              <div style={{display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:'0.4rem'}}>
+                <span style={{fontSize:'0.78rem', fontWeight:800, color:'#0f172a'}}>{b.bill_number || 'Bill'}</span>
+                {(b.status || b.result) && (
+                  <span style={{fontSize:'0.6rem', fontWeight:700, color:'#475569', background:'#f1f5f9', padding:'0.15rem 0.45rem', borderRadius:'999px', letterSpacing:'0.02em'}}>
+                    {formatResult(b.result, b.status)}
+                  </span>
+                )}
+              </div>
+              {b.title && (
+                <div style={{fontSize:'0.82rem', color:'#1e293b', lineHeight:1.35, marginTop:'0.25rem'}}>
+                  {b.title}
+                </div>
+              )}
+              {b.official_name && (
+                <div style={{display:'flex', alignItems:'center', gap:'0.4rem', marginTop:'0.4rem', flexWrap:'wrap'}}>
+                  <span style={{fontSize:'0.7rem', color:'#64748b'}}>— {b.official_name}</span>
+                  {off?.party && (
+                    <span style={{fontSize:'0.6rem', fontWeight:700, padding:'0.05rem 0.35rem', borderRadius:'999px', background:'#f1f5f9', color: off.party === 'R' ? '#dc2626' : off.party === 'D' ? '#1d4ed8' : '#475569'}}>
+                      {off.party}
+                    </span>
+                  )}
+                  {off && onProfile && (
+                    <button
+                      onClick={() => onProfile(off)}
+                      style={{marginLeft:'auto', padding:'0.2rem 0.5rem', fontSize:'0.7rem', fontWeight:700, color:'#6366f1', background:'transparent', border:'none', cursor:'pointer'}}
+                    >
+                      View official →
+                    </button>
+                  )}
+                </div>
               )}
             </div>
-            {b.title && (
-              <div style={{fontSize:'0.82rem', color:'#1e293b', lineHeight:1.35, marginTop:'0.25rem'}}>
-                {b.title}
-              </div>
-            )}
-            {b.official_name && (
-              <div style={{fontSize:'0.7rem', color:'#64748b', marginTop:'0.25rem'}}>
-                — {b.official_name}
-              </div>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
+      {filtered.length > visible.length && (
+        <button
+          onClick={() => setPageSize(pageSize + 50)}
+          style={{display:'block', margin:'1rem auto 0', padding:'0.6rem 1.1rem', borderRadius:10, border:'1px solid #e2e8f0', background:'#fff', color:'#4338ca', fontWeight:800, cursor:'pointer'}}
+        >
+          Load more ({filtered.length - visible.length} remaining)
+        </button>
+      )}
     </div>
   );
 }
@@ -4008,6 +4111,30 @@ function ExploreIssuesPanel() {
 
 function ExploreTab({ onProfile, liveOfficials = [], zip = '', countyMetrics = null }) {
   const [exploreSubTab, setExploreSubTab] = useState('officials');
+
+  // Save scroll on official click; restore on mount. Applies to all
+  // officials lists (federal/state/local) since we wrap onProfile.
+  React.useEffect(() => {
+    let raw = null;
+    try { raw = sessionStorage.getItem('explore_scroll'); } catch (_) {}
+    if (raw) {
+      const y = parseInt(raw, 10);
+      if (Number.isFinite(y)) {
+        const t = setTimeout(() => {
+          window.scrollTo(0, y);
+          try { sessionStorage.removeItem('explore_scroll'); } catch (_) {}
+        }, 50);
+        return () => clearTimeout(t);
+      }
+    }
+  }, []);
+
+  const handleOpenProfile = (o) => {
+    try { sessionStorage.setItem('explore_scroll', String(window.scrollY || 0)); } catch (_) {}
+    if (onProfile) onProfile(o);
+  };
+  // Re-bind so existing call sites (onProfile={onProfile}) save scroll too.
+  onProfile = handleOpenProfile;
   const FLAGLER_ZIPS = ['32110','32136','32137','32164'];
   const LOCAL_COVERED_ZIPS = new Set([
     // Flagler
@@ -4114,7 +4241,7 @@ const toggleSubLevel = (branch, level) => {
   );
 
   if (exploreSubTab === 'bills') {
-    return <div className="tab-content">{SubTabBar}<ExploreBillsPanel zip={zip} /></div>;
+    return <div className="tab-content">{SubTabBar}<ExploreBillsPanel zip={zip} onProfile={onProfile} liveOfficials={liveOfficials} /></div>;
   }
   if (exploreSubTab === 'issues') {
     return <div className="tab-content">{SubTabBar}<ExploreIssuesPanel /></div>;
@@ -4960,6 +5087,25 @@ function MyProfileTab({ zip, userName, userPhoto, onPhotoChange, postsRead, like
           })}
         </div>
       </div>
+
+      {/* ── Share button ──────────────────────────────────────────────── */}
+      {effectiveCount > 0 && (
+        <div style={{margin:'0.85rem 1rem 0', display:'flex', justifyContent:'center'}}>
+          <button
+            onClick={() => {
+              const text = `I've voted on ${effectiveCount} bills on PolitiScore — see how your reps vote: https://politiscore.com`;
+              if (navigator.share) {
+                navigator.share({ text }).catch(() => {});
+              } else if (navigator.clipboard) {
+                navigator.clipboard.writeText(text).then(() => alert('Copied to clipboard!')).catch(() => {});
+              }
+            }}
+            style={{padding:'0.5rem 1rem', borderRadius:10, border:'1px solid #c7d2fe', background:'#eef2ff', color:'#4338ca', fontWeight:800, fontSize:'0.85rem', cursor:'pointer'}}
+          >
+            📣 Share my civic activity
+          </button>
+        </div>
+      )}
 
       {/* ── My Votes (last 10) ─────────────────────────────────────────── */}
       {recentVotes.length > 0 && (
@@ -8022,6 +8168,170 @@ function AlignmentSection({ officialId }) {
   );
 }
 
+// True for sheriffs, police chiefs, and police-department heads.
+const isLawEnforcement = (title) => {
+  const t = (title || '').toLowerCase();
+  return t.includes('sheriff') || t.includes('police chief') || t.includes('police department') || t.includes('chief of police');
+};
+
+function CrimeTrendChart({ officialId }) {
+  const [data, setData] = useState(null);
+  React.useEffect(() => {
+    if (!officialId || !isFetchableId(officialId)) return;
+    fetchCrimeTrend(officialId).then((res) => res.success && setData(res.data));
+  }, [officialId]);
+  if (!data || !Array.isArray(data.years) || data.years.length === 0) return null;
+
+  const w = 320, h = 140, pad = 28;
+  const innerW = w - pad * 2, innerH = h - pad - 14;
+  const max = Math.max(100, ...data.clearance_rates);
+  const barW = innerW / Math.max(data.years.length, 1) * 0.65;
+  const slot = innerW / Math.max(data.years.length, 1);
+
+  return (
+    <div style={{margin:'0.75rem 1rem', padding:'0.95rem 1rem', background:'#ffffff', border:'1px solid var(--border, #e2e8f0)', borderRadius:'0.85rem'}}>
+      <div style={{fontSize:'0.62rem', fontWeight:800, letterSpacing:'0.06em', color:'#475569', textTransform:'uppercase'}}>
+        Case Clearance Rate Trend
+      </div>
+      {data.years.length === 1 ? (
+        <div style={{marginTop:'0.5rem', display:'flex', alignItems:'baseline', gap:'0.5rem'}}>
+          <div style={{fontSize:'1.6rem', fontWeight:800, color:'#0f172a'}}>{data.clearance_rates[0]?.toFixed(1)}%</div>
+          <div style={{fontSize:'0.78rem', color:'var(--text-3)', fontStyle:'italic'}}>Historical trend data coming soon</div>
+        </div>
+      ) : (
+        <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} role="img" aria-label="Clearance rate trend">
+          <line x1={pad} y1={h - pad} x2={w - pad} y2={h - pad} stroke="#cbd5e1" />
+          {data.clearance_rates.map((v, i) => {
+            const barH = Math.max(2, (v / max) * innerH);
+            const x = pad + slot * i + (slot - barW) / 2;
+            const y = h - pad - barH;
+            return (
+              <g key={i}>
+                <rect x={x} y={y} width={barW} height={barH} fill="#2563eb" rx={2}>
+                  <title>{`${data.years[i]}: ${v.toFixed(1)}%`}</title>
+                </rect>
+                <text x={x + barW / 2} y={h - pad + 12} fontSize={9} fill="#64748b" textAnchor="middle">{data.years[i]}</text>
+                <text x={x + barW / 2} y={y - 2} fontSize={9} fill="#0f172a" textAnchor="middle" fontWeight={700}>{Math.round(v)}%</text>
+              </g>
+            );
+          })}
+        </svg>
+      )}
+      {data.note && <div style={{marginTop:'0.4rem', fontSize:'0.7rem', color:'var(--text-3)', fontStyle:'italic'}}>{data.note}</div>}
+      {data.source && <div style={{marginTop:'0.25rem', fontSize:'0.6rem', color:'var(--text-3)'}}>Source: {data.source}</div>}
+    </div>
+  );
+}
+
+function MisconductCases({ officialId, county }) {
+  const [data, setData] = useState(null);
+  React.useEffect(() => {
+    if (!officialId || !isFetchableId(officialId)) return;
+    fetchMisconductCases(officialId).then((res) => res.success && setData(res.data));
+  }, [officialId]);
+  if (!data) return null;
+  const cases = (data.cases || []).slice(0, 5);
+  return (
+    <div style={{margin:'0.75rem 1rem', padding:'0.95rem 1rem', background:'#ffffff', border:'1px solid #fde68a', borderRadius:'0.85rem'}}>
+      <div style={{display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:'0.5rem', flexWrap:'wrap'}}>
+        <div style={{fontSize:'0.62rem', fontWeight:800, letterSpacing:'0.06em', color:'#92400e', textTransform:'uppercase'}}>
+          Law Enforcement Accountability
+        </div>
+        <div style={{fontSize:'0.72rem', color:'var(--muted)'}}>
+          {data.total_count} case{data.total_count === 1 ? '' : 's'} on file
+        </div>
+      </div>
+      {cases.length === 0 ? (
+        <p style={{margin:'0.5rem 0 0', fontSize:'0.82rem', color:'var(--text-2)'}}>
+          No civil-rights cases tracked yet for this office. We're surfacing what's available
+          via CourtListener / PACER and will populate as records come in.
+        </p>
+      ) : (
+        <ul style={{listStyle:'none', padding:0, margin:'0.6rem 0 0', display:'flex', flexDirection:'column', gap:'0.4rem'}}>
+          {cases.map((c) => (
+            <li key={c.id} style={{background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:'0.55rem', padding:'0.5rem 0.65rem'}}>
+              <div style={{display:'flex', justifyContent:'space-between', gap:'0.4rem', alignItems:'baseline'}}>
+                <span style={{fontSize:'0.78rem', fontWeight:800, color:'#7c2d12'}}>{c.case_name || 'Case'}</span>
+                {c.date_filed && <span style={{fontSize:'0.62rem', color:'#92400e'}}>{String(c.date_filed).slice(0, 10)}</span>}
+              </div>
+              <div style={{fontSize:'0.7rem', color:'#9a3412', marginTop:'0.2rem'}}>
+                {c.nature_of_suit && <span style={{background:'#fef3c7', padding:'0.05rem 0.4rem', borderRadius:'999px', fontWeight:700, marginRight:'0.4rem'}}>{c.nature_of_suit}</span>}
+                {c.court}
+                {c.outcome && <span style={{marginLeft:'0.4rem', fontStyle:'italic'}}>· {c.outcome}</span>}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {data.external_url && (
+        <a href={data.external_url} target="_blank" rel="noopener noreferrer" style={{display:'inline-block', marginTop:'0.6rem', fontSize:'0.74rem', fontWeight:700, color:'#7c2d12', textDecoration:'none'}}>
+          View all cases on CourtListener →
+        </a>
+      )}
+    </div>
+  );
+}
+
+// 3E: simple "Last verified" + Report-an-error footer for stale profiles.
+function StalenessFooter({ official }) {
+  const [open, setOpen] = useState(false);
+  const [note, setNote] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [done, setDone] = useState(false);
+  const updated = official?.updated_at ? new Date(official.updated_at) : null;
+  const sixMonthsAgo = new Date(); sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+  const isStale = !updated || updated < sixMonthsAgo;
+  if (!isStale && !open) return null;
+
+  const submit = async () => {
+    if (!note.trim()) return;
+    setSubmitting(true);
+    const res = await postOfficialFeedback({
+      officialId: official.id,
+      note,
+      category: 'profile-error',
+      reporterUserId: getAnonUserId(),
+    });
+    setSubmitting(false);
+    if (res.success) { setDone(true); setNote(''); }
+  };
+
+  return (
+    <div style={{margin:'0.5rem 1rem 0', fontSize:'0.7rem', color:'var(--text-3)'}}>
+      Last verified: {updated ? updated.toLocaleDateString() : 'unknown'} —{' '}
+      <button onClick={() => setOpen(true)} style={{background:'transparent', border:'none', color:'#6366f1', textDecoration:'underline', cursor:'pointer', padding:0, fontSize:'0.7rem'}}>
+        Report an error →
+      </button>
+      {open && (
+        <div role="dialog" aria-modal="true" onClick={() => setOpen(false)} style={{position:'fixed', inset:0, background:'rgba(15,23,42,0.45)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000, padding:'1rem'}}>
+          <div onClick={(e) => e.stopPropagation()} style={{background:'#fff', borderRadius:14, padding:'1.25rem', maxWidth:'440px', width:'100%', boxShadow:'0 10px 30px rgba(0,0,0,0.2)'}}>
+            <h3 style={{margin:'0 0 0.5rem', fontSize:'1.05rem', fontWeight:800, color:'#0f172a'}}>Report an error on this profile</h3>
+            <p style={{margin:'0 0 0.85rem', fontSize:'0.82rem', color:'var(--text-2)'}}>
+              {official?.name} — what's wrong? Wrong officeholder, outdated photo, broken link?
+            </p>
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              rows={4}
+              placeholder="Describe the error…"
+              style={{width:'100%', padding:'0.6rem 0.75rem', borderRadius:10, border:'1px solid #e2e8f0', fontSize:'0.88rem', boxSizing:'border-box'}}
+            />
+            {done && <p style={{color:'#16a34a', fontSize:'0.85rem', margin:'0.5rem 0'}}>Thanks — we'll review.</p>}
+            <div style={{display:'flex', gap:'0.5rem', marginTop:'0.85rem', justifyContent:'flex-end'}}>
+              <button onClick={() => setOpen(false)} style={{padding:'0.55rem 0.85rem', borderRadius:8, border:'1px solid #e2e8f0', background:'#fff', cursor:'pointer'}}>Close</button>
+              {!done && (
+                <button onClick={submit} disabled={submitting || !note.trim()} style={{padding:'0.55rem 0.95rem', borderRadius:8, border:'none', background:'#6366f1', color:'#fff', fontWeight:700, cursor:'pointer'}}>
+                  {submitting ? 'Sending…' : 'Send'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function OfficialProfile({ official: o, onBack, likes, onLike, zip }) {
   const [profTab, setProfTab] = useState('posts');
   const [legActivity, setLegActivity] = useState([]);
@@ -8133,7 +8443,11 @@ function OfficialProfile({ official: o, onBack, likes, onLike, zip }) {
       <AlignmentSection officialId={o.id} />
       <CommitteeAssignmentsCard officialId={o.id} />
 
+      {isLawEnforcement(o.title) && <CrimeTrendChart officialId={o.id} />}
+      {isLawEnforcement(o.title) && <MisconductCases officialId={o.id} county={o.county} />}
+
       <AccountabilityScorecardSection scorecard={scorecard} loading={scorecardLoading} officialId={o.id} />
+      <StalenessFooter official={o} />
 
       <div className="prof-tabs">
         <button className={`prof-tab-btn ${profTab==='posts'?'prof-tab-active':''}`} onClick={() => setProfTab('posts')}>📝 Posts</button>
@@ -8274,9 +8588,20 @@ export default function App() {
 
 React.useEffect(() => {
   if (!zip) return;
+  // sessionStorage cache: instantly populate Explore from cache, then refresh
+  // in background. Cache survives same-tab navigation, dropped at tab close.
+  const cacheKey = `officials_${zip}`;
+  try {
+    const cached = sessionStorage.getItem(cacheKey);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (Array.isArray(parsed) && parsed.length > 0) setLiveOfficials(parsed);
+    }
+  } catch (_) {}
   fetchOfficialsByZip(zip).then(result => {
     if (result.success && result.officials.length > 0) {
       setLiveOfficials(result.officials);
+      try { sessionStorage.setItem(cacheKey, JSON.stringify(result.officials)); } catch (_) {}
     }
   });
   fetchFeedByZip(zip).then(result => {
@@ -8346,9 +8671,47 @@ React.useEffect(() => {
   // App-shell typology quiz overlay (BackendTypologyQuiz). Triggered from the
   // feed CTA below; closes back to whatever the user was looking at.
   const [showQuizOverlay, setShowQuizOverlay] = useState(false);
+  // Onboarding wizard step ('welcome' | 'zip' | 'quiz' | 'done'). Skips to
+  // 'done' immediately on returning users who already cleared onboarding.
+  const [onboardingStep, setOnboardingStep] = useState(() => {
+    try { return localStorage.getItem('onboarding_complete') === '1' ? 'done' : 'welcome'; }
+    catch (_) { return 'welcome'; }
+  });
+
+  // Honor a /reset-password?token=… link before any auth state.
+  const isResetRoute = typeof window !== 'undefined'
+    && (window.location.pathname.startsWith('/reset-password') || new URLSearchParams(window.location.search).get('reset') === '1');
+  if (isResetRoute) {
+    return <ResetPasswordScreen onBackToLogin={() => { window.location.href = '/'; }} />;
+  }
 
   if (!user) return <Login onAuth={(u, z) => { localStorage.setItem('politiscore_user', JSON.stringify(u)); setUser(u); if (z) setZip(z); }} />;
-  if (!zip) return <ZipOnboarding onComplete={setZip} />;
+
+  // Multi-step onboarding for first-time users (no ZIP set yet).
+  // Step 1: Welcome  →  Step 2: ZIP entry  →  Step 3: Quiz prompt.
+  // localStorage.onboarding_complete gates so it never reappears.
+  const onboardingDone = (() => { try { return localStorage.getItem('onboarding_complete') === '1'; } catch (_) { return false; } })();
+  if (!zip) {
+    if (onboardingStep === 'welcome') {
+      return <WelcomeOnboarding onContinue={() => setOnboardingStep('zip')} />;
+    }
+    return <ZipOnboarding onComplete={(z) => { setZip(z); setOnboardingStep('quiz'); }} />;
+  }
+  if (zip && !onboardingDone && onboardingStep === 'quiz') {
+    return (
+      <PostZipQuizPrompt
+        onTakeQuiz={() => {
+          try { localStorage.setItem('onboarding_complete', '1'); } catch (_) {}
+          setOnboardingStep('done');
+          setShowQuizOverlay(true);
+        }}
+        onSkip={() => {
+          try { localStorage.setItem('onboarding_complete', '1'); } catch (_) {}
+          setOnboardingStep('done');
+        }}
+      />
+    );
+  }
   if (showQuizOverlay) {
     return (
       <div className="app-shell">
@@ -8403,6 +8766,7 @@ React.useEffect(() => {
         </header>
       )}
       <main className="app-main">
+        <ErrorBoundary>
         {profile ? (
           <OfficialProfile official={profile} onBack={() => setProfile(null)} likes={likes} onLike={toggleLike} zip={zip} />
         ) : (
@@ -8418,6 +8782,7 @@ React.useEffect(() => {
             {tab==='profile' && <MyProfileTab zip={zip} userName={userName} userPhoto={userPhoto} onPhotoChange={setUserPhoto} postsRead={readPostIds.size} likes={likes} followedLocations={followedLocations} onManageLocations={() => setShowLocModal(true)} pollVotesCount={pollVotes.length} pinnedPosts={pinnedPosts} onUnpin={(id) => setPinnedPosts(prev => prev.filter(p => p.id !== id))} onLogout={handleLogout} liveOfficials={liveOfficials} liveFeedItems={liveFeedItems} onTakeQuiz={() => setShowQuizOverlay(true)} />}
           </>
         )}
+        </ErrorBoundary>
       </main>
       <BottomNav active={tab} onChange={changeTab} unreadNotifs={unreadNotifCount} />
     </div>

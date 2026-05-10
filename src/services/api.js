@@ -564,6 +564,80 @@ export async function fetchOfficialAlignment(officialId, userId) {
   }
 }
 
+// ─── Password recovery ──────────────────────────────────────────────────────
+export async function postForgotPassword(email) {
+  try {
+    const r = await fetch(`${BASE_URL}/auth/forgot-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    if (!r.ok) throw new Error(`Backend returned ${r.status}`);
+    return { success: true, data: await r.json() };
+  } catch (err) {
+    return { success: false, error: String(err.message || err) };
+  }
+}
+
+export async function postResetPassword({ token, newPassword }) {
+  try {
+    const r = await fetch(`${BASE_URL}/auth/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, new_password: newPassword }),
+    });
+    if (!r.ok) {
+      let detail = '';
+      try { detail = (await r.json()).detail || ''; } catch (_) {}
+      throw new Error(detail || `Backend returned ${r.status}`);
+    }
+    return { success: true, data: await r.json() };
+  } catch (err) {
+    return { success: false, error: String(err.message || err) };
+  }
+}
+
+// ─── Official feedback (from staleness modal) ───────────────────────────────
+export async function postOfficialFeedback({ officialId, note, category, reporterUserId }) {
+  try {
+    const r = await fetch(`${BASE_URL}/feedback/official-error`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        official_id: officialId,
+        note,
+        category: category || null,
+        reporter_user_id: reporterUserId || null,
+      }),
+    });
+    if (!r.ok) throw new Error(`Backend returned ${r.status}`);
+    return { success: true, data: await r.json() };
+  } catch (err) {
+    return { success: false, error: String(err.message || err) };
+  }
+}
+
+// ─── Crime trend + misconduct cases (best-effort) ───────────────────────────
+export async function fetchCrimeTrend(officialId) {
+  try {
+    const r = await fetch(`${BASE_URL}/officials/${officialId}/crime-trend`);
+    if (!r.ok) throw new Error(`Backend returned ${r.status}`);
+    return { success: true, data: await r.json() };
+  } catch (err) {
+    return { success: false, data: null, error: String(err.message || err) };
+  }
+}
+
+export async function fetchMisconductCases(officialId) {
+  try {
+    const r = await fetch(`${BASE_URL}/officials/${officialId}/misconduct-cases`);
+    if (!r.ok) throw new Error(`Backend returned ${r.status}`);
+    return { success: true, data: await r.json() };
+  } catch (err) {
+    return { success: false, data: null, error: String(err.message || err) };
+  }
+}
+
 // ─── Recent votes by this user, joined to bill metadata ────────────────────
 export async function fetchUserRecentVotes(userId, { limit = 10 } = {}) {
   if (!userId) return { success: false, items: [] };

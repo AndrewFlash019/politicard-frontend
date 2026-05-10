@@ -295,6 +295,51 @@ function FeedError({ onRetry, msg }) {
 // Top-level component — single chronological stream with infinite scroll
 // ---------------------------------------------------------------------------
 
+// Group consecutive cards from the same official (vote streaks tend to come
+// in batches). Returns array of either {kind:'single', item} or
+// {kind:'group', who, level, items:[...]}.
+function groupByOfficial(items) {
+  const out = [];
+  let buf = [];
+  const flush = () => {
+    if (buf.length === 0) return;
+    if (buf.length === 1) out.push({ kind: 'single', item: buf[0] });
+    else out.push({ kind: 'group', who: buf[0].official_name, level: buf[0].official_level, items: buf });
+    buf = [];
+  };
+  for (const it of items) {
+    if (buf.length && buf[0].official_name === it.official_name && buf[0].activity_type === 'vote' && it.activity_type === 'vote') {
+      buf.push(it);
+    } else {
+      flush();
+      buf = [it];
+    }
+  }
+  flush();
+  return out;
+}
+
+function GroupedVotes({ group, onVote }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="fcv1-stream-card">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        style={{display:'flex', justifyContent:'space-between', alignItems:'center', width:'100%', padding:'0.5rem 0', background:'transparent', border:'none', cursor:'pointer', color:'var(--text)', fontWeight:800, fontSize:'0.95rem'}}
+      >
+        <span>{group.who} — {group.items.length} recent vote{group.items.length === 1 ? '' : 's'}</span>
+        <span aria-hidden="true">{open ? '▴' : '▾'}</span>
+      </button>
+      {open && (
+        <div style={{display:'flex', flexDirection:'column', gap:'0.6rem', marginTop:'0.5rem'}}>
+          {group.items.map((it) => <StreamCard key={it.id} item={it} onVote={onVote} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function FeedV1({ zip, userName }) {
   const streak = useStreak();
   const [items, setItems] = useState([]);
@@ -304,6 +349,7 @@ export default function FeedV1({ zip, userName }) {
   const [error, setError] = useState(null);
   const [lastVisitAtLoad, setLastVisitAtLoad] = useState(null);
   const [reloadTick, setReloadTick] = useState(0);
+  const [levelFilter, setLevelFilter] = useState('all');
 
   // First page
   useEffect(() => {
@@ -374,13 +420,56 @@ export default function FeedV1({ zip, userName }) {
             will appear here as they happen.
           </p>
         </div>
-      ) : (
-        <div className="fcv1-stream-list">
-          {items.map((it) => (
-            <StreamCard key={it.id} item={it} onVote={onVote} />
-          ))}
-        </div>
-      )}
+      ) : (() => {
+        const filtered = levelFilter === 'all'
+          ? items
+          : items.filter((it) => (it.official_level || '').toLowerCase() === levelFilter);
+        const newSinceLastVisit = lastVisitAtLoad
+          ? filtered.filter((it) => it.date && new Date(it.date) > new Date(lastVisitAtLoad)).length
+          : 0;
+        const grouped = groupByOfficial(filtered);
+        return (
+          <>
+            {newSinceLastVisit > 0 && (
+              <div style={{margin:'0 0 0.6rem', padding:'0.6rem 0.85rem', background:'#eef2ff', border:'1px solid #c7d2fe', borderRadius:'0.65rem', color:'#4338ca', fontSize:'0.85rem', fontWeight:700}}>
+                {newSinceLastVisit} new vote{newSinceLastVisit === 1 ? '' : 's'} since your last visit
+              </div>
+            )}
+            <div style={{display:'flex', gap:'0.35rem', flexWrap:'wrap', marginBottom:'0.6rem'}}>
+              {[
+                {id:'all',     label:'All levels'},
+                {id:'federal', label:'Federal'},
+                {id:'state',   label:'State'},
+                {id:'local',   label:'Local'},
+              ].map((f) => {
+                const active = levelFilter === f.id;
+                return (
+                  <button
+                    key={f.id}
+                    onClick={() => setLevelFilter(f.id)}
+                    style={{
+                      padding:'0.3rem 0.7rem', borderRadius:999, cursor:'pointer',
+                      border:`1px solid ${active ? '#6366f1' : 'var(--border, #e2e8f0)'}`,
+                      background: active ? '#eef2ff' : 'var(--surface, #fff)',
+                      color: active ? '#4338ca' : 'var(--text-2, #475569)',
+                      fontWeight: active ? 800 : 600, fontSize:'0.78rem',
+                    }}
+                  >
+                    {f.label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="fcv1-stream-list">
+              {grouped.map((g, i) =>
+                g.kind === 'group'
+                  ? <GroupedVotes key={`g-${i}-${g.who}`} group={g} onVote={onVote} />
+                  : <StreamCard key={g.item.id} item={g.item} onVote={onVote} />
+              )}
+            </div>
+          </>
+        );
+      })()}
 
       {nextOffset != null && items.length > 0 && (
         <button
