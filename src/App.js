@@ -4136,9 +4136,15 @@ function ExploreTab({ onProfile, liveOfficials = [], zip = '', countyMetrics = n
     }
   }, []);
 
+  // Capture the parent's openProfile BEFORE we rebind onProfile below.
+  // Without this capture, handleOpenProfile would close over the same
+  // `onProfile` slot we're about to overwrite — every card click would call
+  // handleOpenProfile, which would then call onProfile (== handleOpenProfile)
+  // again, recursing until the stack overflows and the click silently dies.
+  const parentOnProfile = onProfile;
   const handleOpenProfile = (o) => {
     try { sessionStorage.setItem('explore_scroll', String(window.scrollY || 0)); } catch (_) {}
-    if (onProfile) onProfile(o);
+    if (parentOnProfile) parentOnProfile(o);
   };
   // Re-bind so existing call sites (onProfile={onProfile}) save scroll too.
   onProfile = handleOpenProfile;
