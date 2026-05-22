@@ -9,7 +9,24 @@ const BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://politicard-backe
 // opts.timeoutMs / opts.noRetry; non-idempotent methods are never retried.
 const DEFAULT_TIMEOUT_MS = 20000;
 const RETRYABLE_STATUS = new Set([502, 503, 504]);
+const RATE_LIMIT_MAX_WAIT_MS = 10000;
 let _authExpiredSignaled = false;
+
+// Parse a Retry-After header (RFC 7231 §7.1.3): either a non-negative integer
+// number of seconds, or an HTTP-date. Returns ms, clamped to a sane ceiling so
+// a hostile/garbled value can't hang the UI; null if header is absent.
+function parseRetryAfter(header) {
+  if (!header) return null;
+  const secs = Number(header);
+  if (Number.isFinite(secs) && secs >= 0) {
+    return Math.min(Math.round(secs * 1000), RATE_LIMIT_MAX_WAIT_MS);
+  }
+  const when = Date.parse(header);
+  if (!Number.isNaN(when)) {
+    return Math.min(Math.max(0, when - Date.now()), RATE_LIMIT_MAX_WAIT_MS);
+  }
+  return null;
+}
 
 function signalAuthExpired() {
   if (_authExpiredSignaled) return;
@@ -61,6 +78,15 @@ async function apiFetch(url, opts = {}) {
 
   if (isIdempotent && !noRetry && RETRYABLE_STATUS.has(res.status)) {
     await new Promise((r) => setTimeout(r, 400));
+    res = await _fetchOnce(url, fetchOpts, timeoutMs);
+  }
+
+  // 429: backend slowapi rate limit. Honor Retry-After if present (capped), or
+  // fall back to a fixed wait. Only retry idempotent methods — replaying a POST
+  // could double-vote, double-waitlist, etc.
+  if (res.status === 429 && isIdempotent && !noRetry) {
+    const wait = parseRetryAfter(res.headers.get('Retry-After')) ?? 1500;
+    await new Promise((r) => setTimeout(r, wait));
     res = await _fetchOnce(url, fetchOpts, timeoutMs);
   }
 
