@@ -1,4 +1,4 @@
-const BASE_URL = 'https://politicard-backend.onrender.com';
+const BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://politicard-backend.onrender.com';
 
 // Party color mapping
 const partyColor = (party) => {

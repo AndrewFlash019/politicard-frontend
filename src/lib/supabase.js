@@ -28,6 +28,14 @@ if (url && key) {
   } catch (_) {
     client = null;
   }
+} else {
+  // Loud warning so a misconfigured deploy doesn't silently fall back to the
+  // FastAPI-only auth path without anyone noticing.
+  const missing = [!url && 'REACT_APP_SUPABASE_URL', !key && 'REACT_APP_SUPABASE_ANON_KEY']
+    .filter(Boolean)
+    .join(', ');
+  // eslint-disable-next-line no-console
+  console.warn(`[supabase] disabled — missing env: ${missing}. Supabase auth methods will return errors.`);
 }
 
 const stub = {
