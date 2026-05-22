@@ -8649,6 +8649,24 @@ React.useEffect(() => {
     setUser(null);
     setZipState(null);
   };
+
+  // apiFetch (src/services/api.js) fires this event when a token-bearing
+  // request returns 401/403. It already clears the server-side token; mirror
+  // that here by dropping the user so the Login screen re-renders instead of
+  // leaving the UI in a half-authed state that keeps hitting 401s.
+  React.useEffect(() => {
+    const onExpired = () => {
+      try {
+        localStorage.removeItem('politiscore_user');
+        localStorage.removeItem('politiscore_zip');
+      } catch (_) {}
+      setUser(null);
+      setZipState(null);
+    };
+    window.addEventListener('politiscore:auth-expired', onExpired);
+    return () => window.removeEventListener('politiscore:auth-expired', onExpired);
+  }, []);
+
   const userName = 'Andrew';
 
   const recordPollVote = (pollId, choice) => setPollVotes(prev => prev.some(v => v.pollId === pollId) ? prev : [...prev, { pollId, choice }]);
