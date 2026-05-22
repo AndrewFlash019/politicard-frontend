@@ -7445,25 +7445,6 @@ function SponsoredBillsDropdown({ officialId, viewBillsUrl }) {
   const [myVotes, setMyVotes] = useState({});
   const [pendingVoteId, setPendingVoteId] = useState(null);
 
-  // Backend currently returns duplicate rows for the same bill_number (one
-  // from the sponsorship ingest, one from a status update). Dedup client-side
-  // by bill_number, keeping the row with the most recent date. This is a
-  // stopgap — the proper fix is `SELECT DISTINCT ON (bill_number) … ORDER BY
-  // bill_number, date DESC` in /officials/{id}/legislative-activity.
-  const dedupBills = (rows) => {
-    if (!Array.isArray(rows)) return [];
-    const byBill = new Map();
-    for (const row of rows) {
-      const key = row.bill_number || `__${row.id}`;
-      const existing = byBill.get(key);
-      if (!existing) { byBill.set(key, row); continue; }
-      const a = row.date ? new Date(row.date).getTime() : 0;
-      const b = existing.date ? new Date(existing.date).getTime() : 0;
-      if (a >= b) byBill.set(key, row);
-    }
-    return Array.from(byBill.values());
-  };
-
   const toggle = () => {
     const next = !expanded;
     setExpanded(next);
@@ -7476,7 +7457,7 @@ function SponsoredBillsDropdown({ officialId, viewBillsUrl }) {
         .then(([result, votesRes]) => {
           if (result.success && result.data) {
             const rows = Array.isArray(result.data.items) ? result.data.items : [];
-            setItems(dedupBills(rows));
+            setItems(rows);
           } else {
             setError(result.error || 'Failed to load bills');
             setItems([]);
