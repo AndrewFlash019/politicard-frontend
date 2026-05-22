@@ -3865,7 +3865,7 @@ function CommissionerScorecard({ officialId }) {
     <div className="scorecard">
       {/* Score disclaimer */}
       <div className="sc-disclaimer">
-        ⚠️ Scores are beta estimates based on available public records. Not independently verified.
+        ⚠️ Sample scorecard — illustrative figures while we build out backend coverage for this office. Not based on live data.
       </div>
 
       {activeVotePoll && (
@@ -6013,7 +6013,7 @@ function SchoolBoardScorecard({ officialId }) {
   return (
     <div className="commissioner-scorecard">
       {activeVotePoll && <VotePollDrawer vote={activeVotePoll} official={o} onClose={() => setActiveVotePoll(null)} />}
-      <div className="sc-disclaimer">⚠️ Scores are beta estimates based on available public records. Not independently verified.</div>
+      <div className="sc-disclaimer">⚠️ Sample scorecard — illustrative figures while we build out backend coverage for this office. Not based on live data.</div>
 
       <div className="sc-scores-row">
         {[
@@ -6344,7 +6344,7 @@ function CityCouncilScorecard({ officialId }) {
     <div className="commissioner-scorecard">
       {activeVotePoll && <VotePollDrawer vote={activeVotePoll} official={o} onClose={() => setActiveVotePoll(null)} />}
 
-      <div className="sc-disclaimer">⚠️ Scores are beta estimates based on available public records. Not independently verified.</div>
+      <div className="sc-disclaimer">⚠️ Sample scorecard — illustrative figures while we build out backend coverage for this office. Not based on live data.</div>
 
       {/* Scores */}
       <div className="sc-scores-row">
@@ -7826,9 +7826,12 @@ function AccountabilityScorecardSection({ scorecard, loading, officialId }) {
       </div>
     );
   }
+  // A null scorecard means the backend has no entry for this role (e.g. ceremonial
+  // offices we don't grade) — stay invisible. An empty metrics array means the role
+  // is tracked but ingestion hasn't populated anything yet — show the header so
+  // users can tell "pending" apart from "N/A".
   if (!scorecard) return null;
   const metrics = Array.isArray(scorecard.metrics) ? scorecard.metrics : [];
-  if (metrics.length === 0) return null;
 
   const overall = scorecard.overall_rating || 'Insufficient Data';
   const overallStyle = SCORECARD_RATING_STYLES[overall] || SCORECARD_RATING_STYLES['Insufficient Data'];
@@ -7868,7 +7871,7 @@ function AccountabilityScorecardSection({ scorecard, loading, officialId }) {
         </div>
       </div>
 
-      {real === 0 && tracked > 0 && (
+      {(metrics.length === 0 || (real === 0 && tracked > 0)) && (
         <div style={{
           marginTop:'0.5rem',
           padding:'0.7rem 0.85rem',
@@ -7884,7 +7887,7 @@ function AccountabilityScorecardSection({ scorecard, loading, officialId }) {
       )}
 
       {/* Metric grid — split haveData (always visible) from no_data (collapsed) */}
-      <ScorecardMetricsGrid metrics={metrics} officialId={officialId} />
+      {metrics.length > 0 && <ScorecardMetricsGrid metrics={metrics} officialId={officialId} />}
     </div>
   );
 }
@@ -8238,6 +8241,10 @@ function MisconductCases({ officialId, county }) {
   }, [officialId]);
   if (!data) return null;
   const cases = (data.cases || []).slice(0, 5);
+  // Hide the whole panel when there's nothing to show. The empty-state copy
+  // ("no cases tracked yet") is noise on the ~all-zero officials and reads as a
+  // bug; better to surface this section only when CourtListener returns hits.
+  if (cases.length === 0 && !data.total_count) return null;
   return (
     <div style={{margin:'0.75rem 1rem', padding:'0.95rem 1rem', background:'#ffffff', border:'1px solid #fde68a', borderRadius:'0.85rem'}}>
       <div style={{display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:'0.5rem', flexWrap:'wrap'}}>
@@ -8250,8 +8257,7 @@ function MisconductCases({ officialId, county }) {
       </div>
       {cases.length === 0 ? (
         <p style={{margin:'0.5rem 0 0', fontSize:'0.82rem', color:'var(--text-2)'}}>
-          No civil-rights cases tracked yet for this office. We're surfacing what's available
-          via CourtListener / PACER and will populate as records come in.
+          {data.total_count} case{data.total_count === 1 ? '' : 's'} on file via CourtListener / PACER. Detail records loading.
         </p>
       ) : (
         <ul style={{listStyle:'none', padding:0, margin:'0.6rem 0 0', display:'flex', flexDirection:'column', gap:'0.4rem'}}>
