@@ -31,6 +31,8 @@ The code is ready. The infrastructure isn't yet. Walk this list start-to-finish 
 
 ### 5. Add environment variables to Render
 ```
+DATABASE_URL=…              postgres://… from Supabase → Project Settings → Database → Connection string
+SECRET_KEY=…                strong random value (e.g. `python -c "import secrets; print(secrets.token_urlsafe(64))"`); JWT signing key — backend refuses to start without it
 SUPABASE_URL=…              from supabase project settings
 SUPABASE_KEY=…              anon key
 SUPABASE_SERVICE_KEY=…      service role key
@@ -41,7 +43,7 @@ COURTLISTENER_API_TOKEN=…   optional, for live misconduct ingestion
 FBI_CDE_API_KEY=…           optional, for live crime trend
 INTERNAL_HEALTH_KEY=…       set to gate /health/detailed
 ANTHROPIC_API_KEY=…         only used by ingest scripts, not runtime
-ENV=production              hardens CORS to politiscore.com only
+ENV=production              drops localhost + dev Netlify preview from CORS allow-list, disables /docs and /openapi.json
 ```
 
 ### 6. Add environment variables to Netlify
