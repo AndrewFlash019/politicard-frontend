@@ -1,5 +1,76 @@
 const BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://politicard-backend.onrender.com';
 
+// ─── apiFetch: timeout + 401 handling + GET retry ────────────────────────────
+// Every backend call in this module goes through apiFetch so the behavior is
+// consistent: a hung backend aborts after 20s instead of hanging the UI; a
+// transient 5xx on an idempotent GET is retried once; a 401/403 on a request
+// that carried a Bearer token clears the stale session and fires a window
+// event so the UI can re-prompt for login. Callers can override via
+// opts.timeoutMs / opts.noRetry; non-idempotent methods are never retried.
+const DEFAULT_TIMEOUT_MS = 20000;
+const RETRYABLE_STATUS = new Set([502, 503, 504]);
+let _authExpiredSignaled = false;
+
+function signalAuthExpired() {
+  if (_authExpiredSignaled) return;
+  _authExpiredSignaled = true;
+  try {
+    window._psToken = null;
+    window._psUser = null;
+    localStorage.removeItem('politiscore_token');
+  } catch (_) {}
+  try {
+    window.dispatchEvent(new CustomEvent('politiscore:auth-expired'));
+  } catch (_) {}
+}
+
+async function _fetchOnce(url, opts, timeoutMs) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...opts, signal: ctrl.signal });
+  } catch (err) {
+    if (err && err.name === 'AbortError') {
+      const e = new Error(`Request timed out after ${timeoutMs}ms`);
+      e.name = 'TimeoutError';
+      throw e;
+    }
+    throw err;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+async function apiFetch(url, opts = {}) {
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, noRetry = false, ...fetchOpts } = opts;
+  const method = (fetchOpts.method || 'GET').toUpperCase();
+  const isIdempotent = method === 'GET' || method === 'HEAD';
+  const hasAuth = !!(fetchOpts.headers && fetchOpts.headers.Authorization);
+
+  let res;
+  try {
+    res = await _fetchOnce(url, fetchOpts, timeoutMs);
+  } catch (err) {
+    if (isIdempotent && !noRetry) {
+      await new Promise((r) => setTimeout(r, 400));
+      res = await _fetchOnce(url, fetchOpts, timeoutMs);
+    } else {
+      throw err;
+    }
+  }
+
+  if (isIdempotent && !noRetry && RETRYABLE_STATUS.has(res.status)) {
+    await new Promise((r) => setTimeout(r, 400));
+    res = await _fetchOnce(url, fetchOpts, timeoutMs);
+  }
+
+  if (hasAuth && (res.status === 401 || res.status === 403)) {
+    signalAuthExpired();
+  }
+
+  return res;
+}
+
 // Party color mapping
 const partyColor = (party) => {
   if (!party) return '#6b7280';
@@ -45,7 +116,7 @@ const mapOfficial = (official, index) => ({
 export async function fetchOfficialsByZip(zip) {
   try {
     const token = window._psToken || localStorage.getItem('politiscore_token') || '';
-    const response = await fetch(`${BASE_URL}/officials/zip/${zip}`, {
+    const response = await apiFetch(`${BASE_URL}/officials/zip/${zip}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -83,7 +154,7 @@ export async function fetchOfficialsByZip(zip) {
 // Register new user
 export async function registerUser({ email, password, full_name, zip_code }) {
   try {
-    const response = await fetch(`${BASE_URL}/auth/register`, {
+    const response = await apiFetch(`${BASE_URL}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password, full_name, zip_code }),
@@ -99,7 +170,7 @@ export async function registerUser({ email, password, full_name, zip_code }) {
 // Login user
 export async function loginUser({ email, password }) {
   try {
-    const response = await fetch(`${BASE_URL}/auth/login`, {
+    const response = await apiFetch(`${BASE_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
@@ -130,7 +201,7 @@ export function logoutUser() {
 // Health check
 export async function checkBackendHealth() {
   try {
-    const res = await fetch(`${BASE_URL}/docs`);
+    const res = await apiFetch(`${BASE_URL}/docs`);
     return res.ok;
   } catch {
     return false;
@@ -141,7 +212,7 @@ export async function checkBackendHealth() {
 export async function fetchMetricsByZip(zip) {
   try {
     const token = window._psToken || localStorage.getItem('politiscore_token') || '';
-    const response = await fetch(`${BASE_URL}/metrics/zip/${zip}`, {
+    const response = await apiFetch(`${BASE_URL}/metrics/zip/${zip}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -165,7 +236,7 @@ export async function fetchMetricsByZip(zip) {
 export async function fetchOfficialMetrics(officialId) {
   try {
     const token = window._psToken || localStorage.getItem('politiscore_token') || '';
-    const response = await fetch(`${BASE_URL}/officials/${officialId}/metrics`, {
+    const response = await apiFetch(`${BASE_URL}/officials/${officialId}/metrics`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -192,7 +263,7 @@ export async function fetchOfficialMetrics(officialId) {
 export async function fetchOfficialDonors(officialId) {
   try {
     const token = window._psToken || localStorage.getItem('politiscore_token') || '';
-    const response = await fetch(`${BASE_URL}/officials/${officialId}/donors`, {
+    const response = await apiFetch(`${BASE_URL}/officials/${officialId}/donors`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -220,7 +291,7 @@ export async function fetchOfficialDonors(officialId) {
 export async function fetchOfficialFundersByIndustry(officialId) {
   try {
     const token = window._psToken || localStorage.getItem('politiscore_token') || '';
-    const response = await fetch(`${BASE_URL}/officials/${officialId}/funders-by-industry`, {
+    const response = await apiFetch(`${BASE_URL}/officials/${officialId}/funders-by-industry`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -247,7 +318,7 @@ export async function fetchOfficialFundersByIndustry(officialId) {
 export async function fetchOfficialSpending(officialId) {
   try {
     const token = window._psToken || localStorage.getItem('politiscore_token') || '';
-    const response = await fetch(`${BASE_URL}/officials/${officialId}/spending`, {
+    const response = await apiFetch(`${BASE_URL}/officials/${officialId}/spending`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -276,7 +347,7 @@ export async function fetchOfficialSpending(officialId) {
 export async function fetchOfficialExpenditures(officialId) {
   try {
     const token = window._psToken || localStorage.getItem('politiscore_token') || '';
-    const response = await fetch(`${BASE_URL}/officials/${officialId}/expenditures`, {
+    const response = await apiFetch(`${BASE_URL}/officials/${officialId}/expenditures`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -301,7 +372,7 @@ export async function fetchOfficialExpenditures(officialId) {
 export async function fetchOfficialLegislation(officialId) {
   try {
     const token = window._psToken || localStorage.getItem('politiscore_token') || '';
-    const response = await fetch(`${BASE_URL}/officials/${officialId}/legislation`, {
+    const response = await apiFetch(`${BASE_URL}/officials/${officialId}/legislation`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -328,7 +399,7 @@ export async function fetchOfficialLegislation(officialId) {
 export async function fetchOfficialScorecard(officialId) {
   try {
     const token = window._psToken || localStorage.getItem('politiscore_token') || '';
-    const response = await fetch(`${BASE_URL}/officials/${officialId}/accountability-scorecard`, {
+    const response = await apiFetch(`${BASE_URL}/officials/${officialId}/accountability-scorecard`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -355,7 +426,7 @@ export async function fetchOfficialScorecard(officialId) {
 export async function fetchFeedByZip(zip) {
   try {
     const token = window._psToken || localStorage.getItem('politiscore_token') || '';
-    const response = await fetch(`${BASE_URL}/feed/zip/${zip}`, {
+    const response = await apiFetch(`${BASE_URL}/feed/zip/${zip}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -383,7 +454,7 @@ export async function fetchOfficialMyVotes(officialId, userId) {
     const params = new URLSearchParams({ user_id: userId });
     const token = window._psToken || localStorage.getItem('politiscore_token') || '';
     const url = `${BASE_URL}/officials/${officialId}/my-votes?${params.toString()}`;
-    const response = await fetch(url, {
+    const response = await apiFetch(url, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -410,7 +481,7 @@ export async function fetchOfficialLegislativeActivity(officialId, { activityTyp
     params.set('offset', String(offset));
     const token = window._psToken || localStorage.getItem('politiscore_token') || '';
     const url = `${BASE_URL}/officials/${officialId}/legislative-activity?${params.toString()}`;
-    const response = await fetch(url, {
+    const response = await apiFetch(url, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -435,7 +506,7 @@ export async function fetchFeedV1(zip, { lastVisit, limit = 20, offset = 0 } = {
     params.set('limit', String(limit));
     params.set('offset', String(offset));
     const token = window._psToken || localStorage.getItem('politiscore_token') || '';
-    const response = await fetch(`${BASE_URL}/feed/${zip}?${params.toString()}`, {
+    const response = await apiFetch(`${BASE_URL}/feed/${zip}?${params.toString()}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -469,7 +540,7 @@ export async function fetchFeedStream(zip, { limit = 50, offset = 0 } = {}) {
   try {
     const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
     const url = `${BASE_URL}/feed/${zip}/stream?${params.toString()}`;
-    const r = await fetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
+    const r = await apiFetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
     if (!r.ok) throw new Error(`Backend returned ${r.status}`);
     const data = await r.json();
     return { success: true, data };
@@ -498,7 +569,7 @@ function anonUserId() {
 
 export async function postConstituentVote({ officialId, feedCardId, position }) {
   try {
-    const r = await fetch(`${BASE_URL}/constituent-votes`, {
+    const r = await apiFetch(`${BASE_URL}/constituent-votes`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -519,7 +590,7 @@ export async function postConstituentVote({ officialId, feedCardId, position }) 
 // ─── Per-official committees ────────────────────────────────────────────────
 export async function fetchOfficialCommittees(officialId) {
   try {
-    const r = await fetch(`${BASE_URL}/officials/${officialId}/committees`, {
+    const r = await apiFetch(`${BASE_URL}/officials/${officialId}/committees`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
     });
@@ -536,7 +607,7 @@ export async function fetchOfficialCommittees(officialId) {
 // ─── Civic engagement (level + total votes) for a user_id ───────────────────
 export async function fetchUserEngagement(userId) {
   try {
-    const r = await fetch(`${BASE_URL}/users/${encodeURIComponent(userId)}/engagement`, {
+    const r = await apiFetch(`${BASE_URL}/users/${encodeURIComponent(userId)}/engagement`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
     });
@@ -552,7 +623,7 @@ export async function fetchUserEngagement(userId) {
 export async function fetchOfficialAlignment(officialId, userId) {
   try {
     const url = `${BASE_URL}/officials/${officialId}/alignment?user_id=${encodeURIComponent(userId)}`;
-    const r = await fetch(url, {
+    const r = await apiFetch(url, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
     });
@@ -567,7 +638,7 @@ export async function fetchOfficialAlignment(officialId, userId) {
 // ─── Waitlist ────────────────────────────────────────────────────────────────
 export async function postWaitlist({ email, zipCode, source }) {
   try {
-    const r = await fetch(`${BASE_URL}/waitlist`, {
+    const r = await apiFetch(`${BASE_URL}/waitlist`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -590,7 +661,7 @@ export async function postWaitlist({ email, zipCode, source }) {
 // ─── Health (used by launch checklist page) ──────────────────────────────────
 export async function fetchHealth() {
   try {
-    const r = await fetch(`${BASE_URL}/health`);
+    const r = await apiFetch(`${BASE_URL}/health`);
     if (!r.ok) throw new Error(`Backend returned ${r.status}`);
     return { success: true, data: await r.json() };
   } catch (err) {
@@ -601,7 +672,7 @@ export async function fetchHealth() {
 // ─── Password recovery ──────────────────────────────────────────────────────
 export async function postForgotPassword(email) {
   try {
-    const r = await fetch(`${BASE_URL}/auth/forgot-password`, {
+    const r = await apiFetch(`${BASE_URL}/auth/forgot-password`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email }),
@@ -615,7 +686,7 @@ export async function postForgotPassword(email) {
 
 export async function postResetPassword({ token, newPassword }) {
   try {
-    const r = await fetch(`${BASE_URL}/auth/reset-password`, {
+    const r = await apiFetch(`${BASE_URL}/auth/reset-password`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token, new_password: newPassword }),
@@ -634,7 +705,7 @@ export async function postResetPassword({ token, newPassword }) {
 // ─── Official feedback (from staleness modal) ───────────────────────────────
 export async function postOfficialFeedback({ officialId, note, category, reporterUserId }) {
   try {
-    const r = await fetch(`${BASE_URL}/feedback/official-error`, {
+    const r = await apiFetch(`${BASE_URL}/feedback/official-error`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -654,7 +725,7 @@ export async function postOfficialFeedback({ officialId, note, category, reporte
 // ─── Crime trend + misconduct cases (best-effort) ───────────────────────────
 export async function fetchCrimeTrend(officialId) {
   try {
-    const r = await fetch(`${BASE_URL}/officials/${officialId}/crime-trend`);
+    const r = await apiFetch(`${BASE_URL}/officials/${officialId}/crime-trend`);
     if (!r.ok) throw new Error(`Backend returned ${r.status}`);
     return { success: true, data: await r.json() };
   } catch (err) {
@@ -664,7 +735,7 @@ export async function fetchCrimeTrend(officialId) {
 
 export async function fetchMisconductCases(officialId) {
   try {
-    const r = await fetch(`${BASE_URL}/officials/${officialId}/misconduct-cases`);
+    const r = await apiFetch(`${BASE_URL}/officials/${officialId}/misconduct-cases`);
     if (!r.ok) throw new Error(`Backend returned ${r.status}`);
     return { success: true, data: await r.json() };
   } catch (err) {
@@ -676,7 +747,7 @@ export async function fetchMisconductCases(officialId) {
 export async function fetchUserRecentVotes(userId, { limit = 10 } = {}) {
   if (!userId) return { success: false, items: [] };
   try {
-    const r = await fetch(`${BASE_URL}/users/${encodeURIComponent(userId)}/votes?limit=${limit}`, {
+    const r = await apiFetch(`${BASE_URL}/users/${encodeURIComponent(userId)}/votes?limit=${limit}`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
     });
@@ -692,7 +763,7 @@ export async function fetchUserRecentVotes(userId, { limit = 10 } = {}) {
 // ─── Typology quiz ───────────────────────────────────────────────────────────
 export async function fetchTypologyQuestions() {
   try {
-    const r = await fetch(`${BASE_URL}/typology/questions`, {
+    const r = await apiFetch(`${BASE_URL}/typology/questions`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
     });
@@ -706,7 +777,7 @@ export async function fetchTypologyQuestions() {
 
 export async function submitTypologyQuiz({ userId, answers }) {
   try {
-    const r = await fetch(`${BASE_URL}/typology/submit`, {
+    const r = await apiFetch(`${BASE_URL}/typology/submit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ user_id: userId, answers }),
