@@ -35,7 +35,8 @@ function send(event_type, properties) {
         if (navigator.sendBeacon(url, blob)) return;
       }
       fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true })
-        .catch(() => {});
+        // eslint-disable-next-line no-console
+        .catch((err) => console.warn('[analytics] send failed', event_type, err && err.message));
       return;
     } catch (_) { /* try next */ }
   }
