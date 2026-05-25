@@ -769,6 +769,20 @@ export async function fetchMisconductCases(officialId) {
   }
 }
 
+// Sheriff cost-to-taxpayers (lawsuit summary + per-case detail + budget trends).
+// Backend returns { available: false } for non-sheriff officials or those
+// without sheriff_cost_to_taxpayers view data; callers should hide the section
+// in that case.
+export async function fetchOfficialCostToTaxpayers(officialId) {
+  try {
+    const r = await apiFetch(`${BASE_URL}/officials/${officialId}/cost-to-taxpayers`);
+    if (!r.ok) throw new Error(`Backend returned ${r.status}`);
+    return { success: true, data: await r.json() };
+  } catch (err) {
+    return { success: false, data: null, error: String(err.message || err) };
+  }
+}
+
 // ─── Recent votes by this user, joined to bill metadata ────────────────────
 export async function fetchUserRecentVotes(userId, { limit = 10 } = {}) {
   if (!userId) return { success: false, items: [] };

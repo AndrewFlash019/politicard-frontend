@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import './App.css';
-import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip, fetchOfficialLegislation, fetchOfficialMetrics, fetchOfficialDonors, fetchOfficialFundersByIndustry, fetchOfficialSpending, fetchOfficialExpenditures, fetchOfficialScorecard, fetchOfficialCommittees, fetchUserEngagement, fetchOfficialAlignment, fetchOfficialLegislativeActivity, fetchOfficialMyVotes, postConstituentVote, fetchUserRecentVotes, fetchCrimeTrend, fetchMisconductCases, postOfficialFeedback } from './services/api';
+import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip, fetchOfficialLegislation, fetchOfficialMetrics, fetchOfficialDonors, fetchOfficialFundersByIndustry, fetchOfficialSpending, fetchOfficialExpenditures, fetchOfficialScorecard, fetchOfficialCommittees, fetchUserEngagement, fetchOfficialAlignment, fetchOfficialLegislativeActivity, fetchOfficialMyVotes, postConstituentVote, fetchUserRecentVotes, fetchCrimeTrend, fetchMisconductCases, fetchOfficialCostToTaxpayers, postOfficialFeedback } from './services/api';
 import { formatStatus, formatResult } from './utils';
 import BackendTypologyQuiz, { getStoredTypology, clearStoredTypology } from './pages/TypologyQuiz';
 import { ResetPasswordScreen } from './pages/PasswordRecovery';
@@ -8402,6 +8402,209 @@ function MisconductCases({ officialId, county }) {
   );
 }
 
+// ─── Cost to Taxpayers (sheriff-only) ──────────────────────────────────────
+// Pulls civil-rights-lawsuit exposure for a sheriff from
+// /officials/{id}/cost-to-taxpayers. Renders only when:
+//   - apiId(official) is non-null (no backend id → nothing to fetch), AND
+//   - the title looks like a sheriff role, AND
+//   - the backend returned a populated payload (available !== false).
+// The collapsed default keeps the case list out of the way; the summary line
+// is always visible so the rank and per-resident figure stay scannable.
+function CostToTaxpayers({ official }) {
+  const id = apiId(official);
+  const isSheriff = !!(official && (official.title || '').toLowerCase().includes('sheriff'));
+  const [payload, setPayload] = useState(null);
+  const [expanded, setExpanded] = useState(false);
+
+  React.useEffect(() => {
+    if (!id || !isSheriff) { setPayload(null); return; }
+    let cancelled = false;
+    fetchOfficialCostToTaxpayers(id).then((res) => {
+      if (cancelled) return;
+      if (res && res.success && res.data && res.data.available !== false) {
+        setPayload(res.data);
+      } else {
+        setPayload(null);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [id, isSheriff]);
+
+  if (!id || !isSheriff || !payload) return null;
+
+  const s = payload.summary || {};
+  const cases = Array.isArray(payload.cases) ? payload.cases : [];
+  const budgetTrends = Array.isArray(payload.budget_trends) ? payload.budget_trends : [];
+
+  // Per-resident dollars: only meaningful if some settlement amount is on file.
+  const settled = Number(s.total_settled) || 0;
+  const pop = Number(s.population) || 0;
+  const perResidentLine = settled > 0 && pop > 0
+    ? `$${(settled / pop).toFixed(2)} per resident`
+    : (s.cases_undisclosed > 0 ? 'Settlement amounts not publicly disclosed' : null);
+
+  // Rank line bits.
+  const rankLine = (() => {
+    const parts = [];
+    if (s.rank_worst && s.total_sheriffs_ranked) {
+      parts.push(`Ranked ${ordinal(s.rank_worst)} worst of ${s.total_sheriffs_ranked} FL Sheriffs`);
+    }
+    if (s.lawsuit_count != null) {
+      parts.push(`${s.lawsuit_count} civil rights case${s.lawsuit_count === 1 ? '' : 's'} since 2020`);
+    }
+    return parts.join(' · ');
+  })();
+
+  const per10k = (s.lawsuits_per_10k_residents != null)
+    ? `(${Number(s.lawsuits_per_10k_residents).toFixed(2)} per 10K residents)` : null;
+
+  return (
+    <div style={{margin:'0.75rem 1rem', borderRadius:'0.85rem', overflow:'hidden', border:'1px solid #fde68a', background:'#ffffff', boxShadow:'0 1px 2px rgba(15,23,42,0.04)'}}>
+      {/* Summary header — always visible */}
+      <button
+        type="button"
+        onClick={() => setExpanded(v => !v)}
+        aria-expanded={expanded}
+        style={{
+          display:'block', width:'100%', textAlign:'left',
+          background:'#fef9f0', border:0, padding:'0.85rem 1rem',
+          cursor:'pointer',
+        }}
+      >
+        <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:'0.75rem'}}>
+          <div style={{flex:1, minWidth:0}}>
+            <div style={{fontSize:'0.62rem', fontWeight:800, letterSpacing:'0.07em', color:'#92400e', textTransform:'uppercase'}}>
+              Cost to Taxpayers
+            </div>
+            {perResidentLine && (
+              <div style={{marginTop:'0.3rem', display:'flex', alignItems:'baseline', gap:'0.4rem', flexWrap:'wrap'}}>
+                <span style={{fontSize: settled > 0 ? '1.1rem' : '0.88rem', fontWeight:700, color: settled > 0 ? '#7c2d12' : '#475569'}}>
+                  {perResidentLine}
+                </span>
+              </div>
+            )}
+            {rankLine && (
+              <div style={{marginTop:'0.25rem', fontSize:'0.78rem', color:'#475569'}}>
+                <span style={{fontWeight:600}}>{rankLine}</span>
+                {per10k && <span style={{marginLeft:'0.35rem', color:'#64748b'}}>{per10k}</span>}
+              </div>
+            )}
+            {budgetTrends.length > 0 && (
+              <div style={{marginTop:'0.3rem', fontSize:'0.72rem', color:'#92400e'}}>
+                Settlement budget trend available below
+              </div>
+            )}
+          </div>
+          <span
+            aria-hidden="true"
+            style={{
+              fontSize:'1.1rem', color:'#92400e', flexShrink:0,
+              transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+              transition: 'transform 0.18s ease',
+            }}
+          >
+            ▾
+          </span>
+        </div>
+      </button>
+
+      {/* Collapsible case list */}
+      {expanded && (
+        <div style={{padding:'0.75rem 1rem 0.85rem'}}>
+          <div style={{fontSize:'0.7rem', fontWeight:800, letterSpacing:'0.05em', color:'#475569', textTransform:'uppercase', marginBottom:'0.5rem'}}>
+            Civil Rights Lawsuits · {s.lawsuit_count || cases.length} case{(s.lawsuit_count || cases.length) === 1 ? '' : 's'} since 2020
+          </div>
+
+          {cases.length === 0 && s.lawsuit_count > 0 && (
+            <p style={{fontSize:'0.82rem', color:'var(--text-2)', margin:'0.25rem 0 0.75rem'}}>
+              Case details loading — {s.lawsuit_count} cases on record. Full case list available on CourtListener.
+            </p>
+          )}
+
+          {cases.length > 0 && (
+            <ul style={{listStyle:'none', padding:0, margin:0, display:'flex', flexDirection:'column'}}>
+              {cases.map((c, i) => {
+                const filedLabel = c.date_filed ? `Filed ${formatFiledDate(c.date_filed)}` : null;
+                const hasAmount = c.settlement_amount != null && Number(c.settlement_amount) > 0;
+                return (
+                  <li
+                    key={c.id || `${c.case_name}-${i}`}
+                    style={{
+                      padding:'0.65rem 0.1rem',
+                      borderTop: i === 0 ? '0' : '1px solid #f1f5f9',
+                      display:'flex', flexDirection:'column', gap:'0.25rem',
+                    }}
+                  >
+                    <div style={{display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:'0.5rem', flexWrap:'wrap'}}>
+                      <span style={{fontSize:'0.88rem', fontWeight:700, color:'#0f172a'}}>{c.case_name || 'Case'}</span>
+                      <span style={{
+                        fontSize:'0.8rem', fontWeight:700,
+                        color: hasAmount ? '#dc2626' : '#94a3b8',
+                      }}>
+                        {hasAmount ? `$${Number(c.settlement_amount).toLocaleString()}` : (c.settlement_amount_note || 'Not publicly disclosed')}
+                      </span>
+                    </div>
+                    <div style={{display:'flex', alignItems:'center', gap:'0.5rem', flexWrap:'wrap'}}>
+                      {filedLabel && (
+                        <span style={{fontSize:'0.72rem', color:'#64748b'}}>{filedLabel}</span>
+                      )}
+                      {c.court && (
+                        <span style={{
+                          fontSize:'0.65rem', fontWeight:700, color:'#7c2d12',
+                          background:'#fef3c7', padding:'0.1rem 0.45rem', borderRadius:'999px',
+                        }}>
+                          {c.court}
+                        </span>
+                      )}
+                      {c.nature_of_suit && (
+                        <span style={{fontSize:'0.7rem', color:'#475569'}}>{c.nature_of_suit}</span>
+                      )}
+                    </div>
+                    {c.courtlistener_url && (
+                      <a
+                        href={c.courtlistener_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{fontSize:'0.72rem', fontWeight:600, color:'var(--accent)', textDecoration:'none', alignSelf:'flex-start'}}
+                      >
+                        ↗ View on CourtListener
+                      </a>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// "5" → "5th", "4" → "4th", "1" → "1st", "22" → "22nd"
+function ordinal(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return String(n);
+  const mod100 = v % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${v}th`;
+  switch (v % 10) {
+    case 1: return `${v}st`;
+    case 2: return `${v}nd`;
+    case 3: return `${v}rd`;
+    default: return `${v}th`;
+  }
+}
+
+// "2022-03-08" → "Mar 8, 2022"
+function formatFiledDate(iso) {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso + (iso.length === 10 ? 'T00:00:00' : ''));
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch (_) { return iso; }
+}
+
 // 3E: simple "Last verified" + Report-an-error footer for stale profiles.
 function StalenessFooter({ official }) {
   const [open, setOpen] = useState(false);
@@ -8575,6 +8778,7 @@ function OfficialProfile({ official: o, onBack, likes, onLike, zip }) {
 
       {isLawEnforcement(o.title) && <CrimeTrendChart officialId={o.id} />}
       {isLawEnforcement(o.title) && <MisconductCases officialId={o.id} county={o.county} />}
+      <CostToTaxpayers official={o} />
 
       <AccountabilityScorecardSection scorecard={scorecard} loading={scorecardLoading} officialId={o.id} />
       <MetricsPills metrics={scorecard && scorecard.metrics ? scorecard.metrics : []} />
