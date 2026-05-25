@@ -323,6 +323,7 @@ const OFFICIALS = [
   },
   {
     id: 427,
+    backendId: 427,
     name: 'Rick Staly',
     title: 'Flagler County Sheriff',
     party: 'R',

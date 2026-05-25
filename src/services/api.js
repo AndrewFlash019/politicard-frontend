@@ -115,9 +115,14 @@ const levelLabel = (level) => {
   return 'Local';
 };
 
-// Map backend official to frontend format
+// Map backend official to frontend format.
+// `backendId` is the unambiguous backend id — set only when the backend
+// actually returned an id (the `index + 9000` fallback above is a synthetic
+// placeholder for rows that came back without one and must never be sent to
+// /officials/<id>/* endpoints). Components consult this via apiId(o).
 const mapOfficial = (official, index) => ({
   id: official.id || index + 9000,
+  backendId: official.id != null ? official.id : null,
   name: official.name || 'Unknown Official',
   title: official.office || official.title || 'Elected Official',
   party: official.party ? official.party.charAt(0).toUpperCase() : '?',
