@@ -7870,14 +7870,19 @@ function MetricsPills({ metrics }) {
             const value = m.metric_value || m.value;
             const unit = m.metric_unit || m.unit;
             const style = RATING_STYLES[rating];
+            // Symbol units (%, $, €, £, °) sit flush against the number; word
+            // units ("cases", "incidents", etc.) get a space so they read as English.
             const valueDisplay = value && value !== 'Awaiting data ingestion'
-              ? (unit ? `${value}${unit}` : value)
+              ? (unit
+                  ? (unit.match(/^[%$€£°]/) ? `${value}${unit}` : `${value} ${unit}`)
+                  : value)
               : null;
 
             return (
               <div
                 key={`${key}-${i}`}
                 title={[
+                  label,
                   m.benchmark_label ? `Benchmark: ${m.benchmark_label}` : null,
                   m.source ? `Source: ${m.source}` : null,
                   m.year ? `Year: ${m.year}` : null
@@ -7895,6 +7900,13 @@ function MetricsPills({ metrics }) {
                   lineHeight: '1.3',
                   cursor: 'default',
                   userSelect: 'none',
+                  // Cap pill width so long metric labels (e.g. "Fatal Officer-Involved
+                  // Shootings (cumulative)") don't blow out the row layout on phones.
+                  // Full label is in the title attribute above for hover/long-press.
+                  maxWidth: '240px',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
                 }}
               >
                 <span>{label}</span>
@@ -8444,17 +8456,25 @@ function CostToTaxpayers({ official }) {
     ? `$${(settled / pop).toFixed(2)} per resident`
     : (s.cases_undisclosed > 0 ? 'Settlement amounts not publicly disclosed' : null);
 
-  // Rank line bits.
+  // Rank line bits. When both per-population and per-officer ranks exist,
+  // qualify the primary line with "(by population)" so the contrast with the
+  // per-officer line is explicit; otherwise the unqualified phrasing stays.
+  const hasOfficerRank = s.rank_worst_per_officer != null && s.total_sheriffs_ranked;
   const rankLine = (() => {
     const parts = [];
     if (s.rank_worst && s.total_sheriffs_ranked) {
-      parts.push(`Ranked ${ordinal(s.rank_worst)} worst of ${s.total_sheriffs_ranked} FL Sheriffs`);
+      const base = `Ranked ${ordinal(s.rank_worst)} worst of ${s.total_sheriffs_ranked} FL Sheriffs`;
+      parts.push(hasOfficerRank ? `${base} (by population)` : base);
     }
     if (s.lawsuit_count != null) {
       parts.push(`${s.lawsuit_count} civil rights case${s.lawsuit_count === 1 ? '' : 's'} since 2020`);
     }
     return parts.join(' · ');
   })();
+
+  const officerRankLine = hasOfficerRank
+    ? `Ranked ${ordinal(s.rank_worst_per_officer)} worst of ${s.total_sheriffs_ranked} FL Sheriffs (by officers)`
+    : null;
 
   const per10k = (s.lawsuits_per_10k_residents != null)
     ? `(${Number(s.lawsuits_per_10k_residents).toFixed(2)} per 10K residents)` : null;
@@ -8490,6 +8510,19 @@ function CostToTaxpayers({ official }) {
                 {per10k && <span style={{marginLeft:'0.35rem', color:'#64748b'}}>{per10k}</span>}
               </div>
             )}
+            {officerRankLine && (
+              <div style={{marginTop:'0.18rem', fontSize:'0.78rem', color:'#475569', fontWeight:600}}>
+                {officerRankLine}
+              </div>
+            )}
+            {/* Per-officer ratio surfaces only when the backend has FDLE
+                officer-headcount data ingested; stay silent otherwise rather
+                than render an "awaiting" placeholder. */}
+            {s.lawsuits_per_100_officers != null && (
+              <div style={{ fontSize: '13px', color: '#64748b', marginTop: '4px' }}>
+                {s.lawsuits_per_100_officers} lawsuits per 100 sworn officers
+              </div>
+            )}
             {budgetTrends.length > 0 && (
               <div style={{marginTop:'0.3rem', fontSize:'0.72rem', color:'#92400e'}}>
                 Settlement budget trend available below
@@ -8497,14 +8530,14 @@ function CostToTaxpayers({ official }) {
             )}
           </div>
           <span
-            aria-hidden="true"
             style={{
-              fontSize:'1.1rem', color:'#92400e', flexShrink:0,
-              transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
-              transition: 'transform 0.18s ease',
+              fontSize:'0.78rem', fontWeight:700, color:'#92400e',
+              flexShrink:0, whiteSpace:'nowrap',
             }}
           >
-            ▾
+            {expanded
+              ? '▲ Hide cases'
+              : `▼ Show ${s.lawsuit_count != null ? s.lawsuit_count : cases.length} case${(s.lawsuit_count != null ? s.lawsuit_count : cases.length) === 1 ? '' : 's'}`}
           </span>
         </div>
       </button>
@@ -8779,9 +8812,9 @@ function OfficialProfile({ official: o, onBack, likes, onLike, zip }) {
 
       {isLawEnforcement(o.title) && <CrimeTrendChart officialId={o.id} />}
       {isLawEnforcement(o.title) && <MisconductCases officialId={o.id} county={o.county} />}
-      <CostToTaxpayers official={o} />
 
       <AccountabilityScorecardSection scorecard={scorecard} loading={scorecardLoading} officialId={o.id} />
+      <CostToTaxpayers official={o} />
       <MetricsPills metrics={scorecard && scorecard.metrics ? scorecard.metrics : []} />
       <StalenessFooter official={o} />
 
