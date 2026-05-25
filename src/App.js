@@ -7844,7 +7844,7 @@ function MetricsPills({ metrics }) {
   if (realMetrics.length === 0 && awaitingCount === 0) return null;
 
   return (
-    <div style={{ marginTop: '16px', padding: '0 4px' }}>
+    <div style={{ marginTop: '16px', padding: '0 16px', boxSizing: 'border-box', width: '100%' }}>
       <div style={{
         fontSize: '11px',
         fontWeight: '600',
@@ -7900,16 +7900,18 @@ function MetricsPills({ metrics }) {
                   lineHeight: '1.3',
                   cursor: 'default',
                   userSelect: 'none',
-                  // Cap pill width so long metric labels (e.g. "Fatal Officer-Involved
-                  // Shootings (cumulative)") don't blow out the row layout on phones.
-                  // Full label is in the title attribute above for hover/long-press.
-                  maxWidth: '240px',
+                }}
+              >
+                {/* Ellipsis lives on the label span, not the pill div — putting
+                    overflow:hidden on the inline-flex pill clipped the rounded
+                    corners on the left. Full label remains in the title attribute. */}
+                <span style={{
+                  display: 'block',
+                  maxWidth: '180px',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
-                }}
-              >
-                <span>{label}</span>
+                }}>{label}</span>
                 {valueDisplay && (
                   <span style={{
                     opacity: 0.85,
