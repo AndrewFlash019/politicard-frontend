@@ -19,6 +19,12 @@ import Login from './Login';
 // must never be sent to /officials/<id>/* endpoints.
 const isFetchableId = (id) => typeof id === 'number' || (typeof id === 'string' && /^\d+$/.test(id));
 
+// Resolve the backend-side id for an official. When an entry carries a
+// separate `backendId` field (used to break collisions between mock and
+// real ids), prefer that; otherwise return null so callers can skip the
+// fetch instead of hitting /officials/<mock-id>/*.
+const apiId = (o) => (o && o.backendId != null) ? o.backendId : null;
+
 // Compact dollar formatting: $45B / $5M / $1.2K / $850 / —
 function formatMoney(n) {
   const v = Number(n);
@@ -7798,6 +7804,122 @@ function MetricCard({ metric, officialId }) {
   );
 }
 
+function MetricsPills({ metrics }) {
+  if (!metrics || metrics.length === 0) return null;
+
+  const RATING_STYLES = {
+    excellent:    { bg: '#059669', text: '#ffffff' },
+    good:         { bg: '#16a34a', text: '#ffffff' },
+    meeting:      { bg: '#0284c7', text: '#ffffff' },
+    concerning:   { bg: '#d97706', text: '#ffffff' },
+    poor:         { bg: '#dc2626', text: '#ffffff' },
+    failing:      { bg: '#dc2626', text: '#ffffff' },
+    no_data:      null,  // skip
+    awaiting_data: null, // skip
+  };
+
+  // Deduplicate: for each metric_key, keep the entry with the highest year
+  const deduped = Object.values(
+    metrics.reduce((acc, m) => {
+      const key = m.metric_key;
+      if (!acc[key] || (m.year || 0) > (acc[key].year || 0)) {
+        acc[key] = m;
+      }
+      return acc;
+    }, {})
+  );
+
+  const realMetrics = deduped.filter(m => {
+    const rating = m.performance_rating || m.tier;
+    return rating && RATING_STYLES[rating] !== null && RATING_STYLES[rating] !== undefined;
+  });
+
+  const awaitingCount = deduped.length - realMetrics.length;
+
+  if (realMetrics.length === 0 && awaitingCount === 0) return null;
+
+  return (
+    <div style={{ marginTop: '16px', padding: '0 4px' }}>
+      <div style={{
+        fontSize: '11px',
+        fontWeight: '600',
+        color: '#64748b',
+        textTransform: 'uppercase',
+        letterSpacing: '0.05em',
+        marginBottom: '10px'
+      }}>
+        Performance Metrics
+        {realMetrics.length > 0 && (
+          <span style={{ fontWeight: '400', marginLeft: '6px', textTransform: 'none', letterSpacing: 0 }}>
+            {realMetrics.length} tracked
+          </span>
+        )}
+      </div>
+
+      {realMetrics.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+          {realMetrics.map((m, i) => {
+            const rating = m.performance_rating || m.tier;
+            const style = RATING_STYLES[rating];
+            const valueDisplay = m.metric_value && m.metric_value !== 'Awaiting data ingestion'
+              ? (m.metric_unit ? `${m.metric_value}${m.metric_unit}` : m.metric_value)
+              : null;
+
+            return (
+              <div
+                key={`${m.metric_key}-${i}`}
+                title={[
+                  m.benchmark_label ? `Benchmark: ${m.benchmark_label}` : null,
+                  m.source ? `Source: ${m.source}` : null,
+                  m.year ? `Year: ${m.year}` : null
+                ].filter(Boolean).join(' · ')}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  backgroundColor: style.bg,
+                  color: style.text,
+                  borderRadius: '20px',
+                  padding: '4px 10px',
+                  fontSize: '12px',
+                  fontWeight: '500',
+                  lineHeight: '1.3',
+                  cursor: 'default',
+                  userSelect: 'none',
+                }}
+              >
+                <span>{m.metric_label}</span>
+                {valueDisplay && (
+                  <span style={{
+                    opacity: 0.85,
+                    fontSize: '11px',
+                    fontWeight: '600',
+                    borderLeft: '1px solid rgba(255,255,255,0.4)',
+                    paddingLeft: '5px',
+                    marginLeft: '1px'
+                  }}>
+                    {valueDisplay}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {awaitingCount > 0 && (
+        <div style={{
+          marginTop: realMetrics.length > 0 ? '8px' : '0',
+          fontSize: '11px',
+          color: '#94a3b8'
+        }}>
+          {awaitingCount} metric{awaitingCount !== 1 ? 's' : ''} awaiting data
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AccountabilityScorecardSection({ scorecard, loading, officialId }) {
   if (loading) {
     return (
@@ -8447,6 +8569,7 @@ function OfficialProfile({ official: o, onBack, likes, onLike, zip }) {
       {isLawEnforcement(o.title) && <MisconductCases officialId={o.id} county={o.county} />}
 
       <AccountabilityScorecardSection scorecard={scorecard} loading={scorecardLoading} officialId={o.id} />
+      <MetricsPills metrics={scorecard && scorecard.metrics ? scorecard.metrics : []} />
       <StalenessFooter official={o} />
 
       <div className="prof-tabs">
