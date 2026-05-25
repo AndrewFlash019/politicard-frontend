@@ -7818,10 +7818,14 @@ function MetricsPills({ metrics }) {
     awaiting_data: null, // skip
   };
 
-  // Deduplicate: for each metric_key, keep the entry with the highest year
+  // Deduplicate: for each metric key, keep the entry with the highest year.
+  // The backend returns the short field names (key/rating/label/value/unit);
+  // earlier scorecard sketches used the prefixed metric_* / performance_rating
+  // names. We accept either shape so this doesn't silently render blank chips
+  // if the API ever flips back.
   const deduped = Object.values(
     metrics.reduce((acc, m) => {
-      const key = m.metric_key;
+      const key = m.metric_key || m.key;
       if (!acc[key] || (m.year || 0) > (acc[key].year || 0)) {
         acc[key] = m;
       }
@@ -7830,7 +7834,7 @@ function MetricsPills({ metrics }) {
   );
 
   const realMetrics = deduped.filter(m => {
-    const rating = m.performance_rating || m.tier;
+    const rating = m.performance_rating || m.rating || m.tier;
     return rating && RATING_STYLES[rating] !== null && RATING_STYLES[rating] !== undefined;
   });
 
@@ -7859,15 +7863,19 @@ function MetricsPills({ metrics }) {
       {realMetrics.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
           {realMetrics.map((m, i) => {
-            const rating = m.performance_rating || m.tier;
+            const rating = m.performance_rating || m.rating || m.tier;
+            const key = m.metric_key || m.key;
+            const label = m.metric_label || m.label;
+            const value = m.metric_value || m.value;
+            const unit = m.metric_unit || m.unit;
             const style = RATING_STYLES[rating];
-            const valueDisplay = m.metric_value && m.metric_value !== 'Awaiting data ingestion'
-              ? (m.metric_unit ? `${m.metric_value}${m.metric_unit}` : m.metric_value)
+            const valueDisplay = value && value !== 'Awaiting data ingestion'
+              ? (unit ? `${value}${unit}` : value)
               : null;
 
             return (
               <div
-                key={`${m.metric_key}-${i}`}
+                key={`${key}-${i}`}
                 title={[
                   m.benchmark_label ? `Benchmark: ${m.benchmark_label}` : null,
                   m.source ? `Source: ${m.source}` : null,
@@ -7888,7 +7896,7 @@ function MetricsPills({ metrics }) {
                   userSelect: 'none',
                 }}
               >
-                <span>{m.metric_label}</span>
+                <span>{label}</span>
                 {valueDisplay && (
                   <span style={{
                     opacity: 0.85,
