@@ -7844,7 +7844,7 @@ function MetricsPills({ metrics }) {
   if (realMetrics.length === 0 && awaitingCount === 0) return null;
 
   return (
-    <div style={{ marginTop: '16px', padding: '0 16px', boxSizing: 'border-box', width: '100%' }}>
+    <div style={{ marginTop: '16px', paddingLeft: '16px', paddingRight: '16px', boxSizing: 'border-box', width: '100%' }}>
       <div style={{
         fontSize: '11px',
         fontWeight: '600',
@@ -9044,8 +9044,30 @@ React.useEffect(() => {
 
   const toggleLike = (id) => setLikes(prev => prev.includes(id) ? prev.filter(x=>x!==id) : [...prev, id]);
   const markPostRead = (id) => setReadPostIds(prev => { if (prev.has(id)) return prev; const s = new Set(prev); s.add(id); return s; });
-  const openProfile = (o) => setProfile(o);
+  // Open a profile AND push a synthetic history entry so the browser/system
+  // back button (and the in-app ← below) all converge on the same close
+  // action via the popstate listener — instead of exiting the app on the
+  // first back press, which is what happens when there's no SPA history.
+  const openProfile = (o) => {
+    setProfile(o);
+    try {
+      window.history.pushState(
+        { profileOpen: true },
+        '',
+        window.location.pathname + window.location.search,
+      );
+    } catch (_) { /* history API not available — fall back to plain state */ }
+  };
   const changeTab = (t) => { setTab(t); setProfile(null); };
+
+  // Browser/system back → clear the profile so the underlying tab re-renders.
+  // The in-app ← button calls history.back() (below), which lands here too,
+  // keeping URL state and React state in sync.
+  React.useEffect(() => {
+    const onPop = () => setProfile(null);
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
 
   // Live document.title so browser tabs / OS task switchers reflect context.
   React.useEffect(() => {
@@ -9166,7 +9188,23 @@ React.useEffect(() => {
       <main className="app-main">
         <ErrorBoundary>
         {profile ? (
-          <OfficialProfile official={profile} onBack={() => setProfile(null)} likes={likes} onLike={toggleLike} zip={zip} />
+          <OfficialProfile
+            official={profile}
+            onBack={() => {
+              // Route the in-app back through browser history so it stays in
+              // sync with the pushState entry from openProfile. The popstate
+              // listener above will clear the profile state. If history.back
+              // is unavailable for some reason, fall back to the direct clear.
+              try {
+                window.history.back();
+              } catch (_) {
+                setProfile(null);
+              }
+            }}
+            likes={likes}
+            onLike={toggleLike}
+            zip={zip}
+          />
         ) : (
           <>
             {tab==='feed' && (
