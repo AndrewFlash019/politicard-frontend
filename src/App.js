@@ -1220,13 +1220,38 @@ function ZipOnboarding({ onComplete, onOfficialSelect }) {
       <div className="onboard-orbs">
         <div className="orb orb1" /><div className="orb orb2" /><div className="orb orb3" />
       </div>
-      <div className="onboard-inner">
-        <div className="onboard-logo">
+      <div
+        className="onboard-inner"
+        style={{
+          maxWidth: '420px',
+          margin: '0 auto',
+          padding: '32px 24px',
+          boxSizing: 'border-box',
+          position: 'relative',
+          zIndex: 1,
+        }}
+      >
+        <div className="onboard-logo" style={{ justifyContent: 'center', marginBottom: '20px' }}>
           <span className="ob-hex">⬡</span>
           <PolitiCardLogo height={36} />
         </div>
-<h1 className="onboard-headline">Bringing truth<br /><em>to light.</em></h1>
-<p className="onboard-sub">Unbiased. Ad-free. Your elected officials, their votes, and their statements — all in one place.</p>
+
+        {/* SECTION 1 — HERO */}
+        <h1 style={{ fontSize: '28px', fontWeight: 700, color: '#1e293b', textAlign: 'center', margin: '0 0 12px', lineHeight: 1.2 }}>
+          Your officials. Their record. Your call.
+        </h1>
+        <p style={{ fontSize: '15px', color: '#64748b', lineHeight: 1.5, textAlign: 'center', maxWidth: '340px', margin: '0 auto 24px' }}>
+          PolitiScore shows every elected official who represents you — from your city council to Congress — with verified data on their performance, votes, and what they cost taxpayers.
+        </p>
+
+        {/* SECTION 2 — ZIP INPUT (existing logic preserved, just labelled) */}
+        <div style={{
+          fontSize: '13px', fontWeight: 600, color: '#475569',
+          textTransform: 'uppercase', letterSpacing: '0.05em',
+          textAlign: 'center', marginBottom: '10px',
+        }}>
+          Enter your Florida ZIP code to get started
+        </div>
         <form className="onboard-form" onSubmit={submit}>
           <div className="zip-row">
             <span className="zip-pin">📍</span>
@@ -1235,7 +1260,6 @@ function ZipOnboarding({ onComplete, onOfficialSelect }) {
             <button className="zip-go" type="submit">Get Started →</button>
           </div>
           {error && <p className="zip-error">{error}</p>}
-          <p className="zip-note">Free · No ads · No data selling</p>
         </form>
 
         <div style={{ textAlign: 'center', margin: '12px 0 4px', fontSize: '13px', color: '#94a3b8' }}>
@@ -1305,10 +1329,84 @@ function ZipOnboarding({ onComplete, onOfficialSelect }) {
           )}
         </div>
 
-        <div className="onboard-levels">
-          <div className="level-pill">🏛️ Federal</div>
-          <div className="level-pill">🌴 State</div>
-          <div className="level-pill">🏙️ Local</div>
+        {/* SECTION 3 — TEASER CARDS */}
+        <div style={{
+          fontSize: '13px', fontWeight: 600, color: '#94a3b8',
+          textTransform: 'uppercase', letterSpacing: '0.05em',
+          textAlign: 'center', margin: '28px 0 14px',
+        }}>
+          Here's what you'll see
+        </div>
+
+        {/* Card 1 — Officials */}
+        <div>
+          <div style={{ fontSize: '12px', fontWeight: 600, color: '#4361ee', marginBottom: '8px' }}>
+            👥 Officials who represent you
+          </div>
+          <div style={{ background: '#fff', borderRadius: '16px', padding: '16px', boxShadow: '0 2px 12px rgba(0,0,0,0.06)', marginBottom: '12px' }}>
+            <div style={{ filter: 'blur(3px)', opacity: 0.7 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#4361ee', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '14px', flexShrink: 0 }}>RS</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: '15px', color: '#1e293b' }}>Rick Staly</div>
+                  <div style={{ fontSize: '12px', color: '#64748b' }}>Flagler County Sheriff · R</div>
+                </div>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: '#dc2626', background: '#fee2e2', padding: '2px 8px', borderRadius: '999px' }}>R</span>
+              </div>
+              <div style={{ fontSize: '13px', color: '#475569', marginBottom: '4px' }}>Ron DeSantis · Governor of Florida · R</div>
+              <div style={{ fontSize: '12px', color: '#94a3b8' }}>+ 12 more officials in your area</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 2 — Accountability */}
+        <div>
+          <div style={{ fontSize: '12px', fontWeight: 600, color: '#059669', marginBottom: '8px' }}>
+            📊 Their accountability record
+          </div>
+          <div style={{ background: '#fff', borderRadius: '16px', padding: '16px', boxShadow: '0 2px 12px rgba(0,0,0,0.06)', marginBottom: '12px' }}>
+            <div style={{ filter: 'blur(3px)', opacity: 0.7 }}>
+              <div style={{ fontSize: '11px', textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '0.05em', fontWeight: 600 }}>Accountability Scorecard</div>
+              <div style={{ fontSize: '20px', fontWeight: 700, color: '#d97706', marginTop: '4px' }}>Mixed Results</div>
+              <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '13px', gap: '8px' }}>
+                  <span style={{ color: '#475569' }}>Case Clearance Rate</span>
+                  <span style={{ color: '#0f172a', fontWeight: 600 }}>26.3%</span>
+                  <span style={{ fontSize: '10px', color: '#d97706', fontWeight: 700, whiteSpace: 'nowrap' }}>● CONCERNING</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '13px', gap: '8px' }}>
+                  <span style={{ color: '#475569' }}>Civil Rights Lawsuits</span>
+                  <span style={{ color: '#0f172a', fontWeight: 600 }}>7 cases</span>
+                  <span style={{ fontSize: '10px', color: '#dc2626', fontWeight: 700, whiteSpace: 'nowrap' }}>● POOR</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 3 — Cost to Taxpayers */}
+        <div>
+          <div style={{ fontSize: '12px', fontWeight: 600, color: '#dc2626', marginBottom: '8px' }}>
+            💰 What it costs taxpayers
+          </div>
+          <div style={{ background: '#fff', borderRadius: '16px', padding: '16px', boxShadow: '0 2px 12px rgba(0,0,0,0.06)', marginBottom: '12px' }}>
+            <div style={{ filter: 'blur(3px)', opacity: 0.7 }}>
+              <div style={{ fontSize: '11px', textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '0.05em', fontWeight: 600 }}>Cost to Taxpayers</div>
+              <div style={{ fontSize: '20px', fontWeight: 700, color: '#0f172a', marginTop: '4px' }}>$0.58 per resident</div>
+              <div style={{ fontSize: '13px', color: '#475569', marginTop: '4px' }}>Ranked 4th worst of 23 FL Sheriffs</div>
+              <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>7 civil rights cases since 2020</div>
+            </div>
+          </div>
+        </div>
+
+        {/* SECTION 4 — FOOTER TRUST LINE */}
+        <div style={{ textAlign: 'center', marginTop: '28px' }}>
+          <div style={{ fontSize: '13px', color: '#94a3b8' }}>
+            Free · No ads · Government works for you
+          </div>
+          <div style={{ fontSize: '11px', color: '#cbd5e1', marginTop: '4px' }}>
+            Data sourced exclusively from government records
+          </div>
         </div>
       </div>
     </div>
