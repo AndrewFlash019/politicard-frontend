@@ -583,11 +583,13 @@ export async function fetchFeedV1(zip, { lastVisit, limit = 20, offset = 0 } = {
 }
 
 // ─── Stream feed: chronological mix of legislative_activity for a ZIP ───────
+// Stream endpoint can take longer than the default 20s under load (large
+// constituent_votes aggregates on the backend), so give it a 30s ceiling.
 export async function fetchFeedStream(zip, { limit = 50, offset = 0 } = {}) {
   try {
     const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
     const url = `${BASE_URL}/feed/${zip}/stream?${params.toString()}`;
-    const r = await apiFetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
+    const r = await apiFetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' }, timeoutMs: 30000 });
     if (!r.ok) throw new Error(`Backend returned ${r.status}`);
     const data = await r.json();
     return { success: true, data };
