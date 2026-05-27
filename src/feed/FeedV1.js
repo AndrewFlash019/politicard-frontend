@@ -45,6 +45,33 @@ function activityIcon(activity_type, vote_position) {
   return '📰';
 }
 
+// Pill styling for the vote-position chip on the stream card. "Not Voting"
+// must be matched before "Nay" because both start with "n".
+function voteBadgeStyle(vote_position) {
+  const v = (vote_position || '').toLowerCase().trim();
+  if (!v) return null;
+  if (v.startsWith('not')) return { bg: '#f1f5f9', fg: '#64748b', text: '~ Not Voting' };
+  if (v.startsWith('y'))   return { bg: '#dcfce7', fg: '#15803d', text: '✓ Yea' };
+  if (v.startsWith('n'))   return { bg: '#fee2e2', fg: '#b91c1c', text: '✗ Nay' };
+  if (v.startsWith('p'))   return { bg: '#f1f5f9', fg: '#64748b', text: '~ Present' };
+  return null;
+}
+
+// "2026-04-23" → "Apr 23, 2026". Anchored at local noon so a UTC date
+// doesn't slide a day on negative timezones.
+function formatAbsoluteDate(date) {
+  if (!date) return '';
+  const iso = typeof date === 'string' && date.length === 10 ? `${date}T12:00:00` : date;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function truncate60(s) {
+  if (!s) return s;
+  return s.length > 60 ? s.slice(0, 59) + '…' : s;
+}
+
 function levelBadge(level) {
   const v = (level || '').toLowerCase();
   if (v === 'federal') return { label: 'FEDERAL', color: '#7c3aed' };
@@ -122,12 +149,14 @@ function StreamCard({ item, onVote }) {
   });
 
   const shortTitle = buildShortTitle(item);
-  const billName = buildBillName(item);
+  const billName = truncate60(buildBillName(item));
   const fullSummary = (item.plain_english_summary && item.plain_english_summary.trim()) || '';
 
   const lvl = levelBadge(item.official_level);
   const icon = activityIcon(item.activity_type, item.vote_position);
   const when = relativeFromDate(item.date);
+  const absDate = formatAbsoluteDate(item.date);
+  const voteBadge = item.activity_type === 'vote' ? voteBadgeStyle(item.vote_position) : null;
   const linkUrl = item.full_text_url || item.source_url || null;
 
   const handleVote = async (e, position) => {
@@ -180,6 +209,21 @@ function StreamCard({ item, onVote }) {
               </span>
             )}
             {item.bill_number && <span className="fcv1-stream-bill">{item.bill_number}</span>}
+            {voteBadge && (
+              <span
+                style={{
+                  background: voteBadge.bg,
+                  color: voteBadge.fg,
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  padding: '2px 8px',
+                  borderRadius: '999px',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {voteBadge.text}
+              </span>
+            )}
           </div>
           <h3 className="fcv1-stream-title">{shortTitle}</h3>
           {billName && <div className="fcv1-stream-billname" title={billName}>{billName}</div>}
@@ -210,7 +254,9 @@ function StreamCard({ item, onVote }) {
             )}
           </div>
           <div className="fcv1-stream-meta-bot">
-            {when && <span className="fcv1-stream-time">{when}</span>}
+            {absDate && (
+              <span className="fcv1-stream-time" title={when}>{absDate}</span>
+            )}
             {(item.result || item.status) && (
               <span className="fcv1-stream-status">· {formatResult(item.result, item.status)}</span>
             )}
@@ -320,7 +366,12 @@ function groupByOfficial(items) {
 }
 
 function GroupedVotes({ group, onVote }) {
-  const [open, setOpen] = useState(false);
+  // Default-open so the cards inside the group are immediately visible. The
+  // prior default of `false` was the root cause of "300 items loaded, nothing
+  // visible" — consecutive votes from one official all collapsed into a
+  // single title button. The toggle still works for users who want to fold
+  // a long streak back up.
+  const [open, setOpen] = useState(true);
   return (
     <div className="fcv1-stream-card">
       <button
