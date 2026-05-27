@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import './App.css';
-import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip, fetchOfficialLegislation, fetchOfficialMetrics, fetchOfficialDonors, fetchOfficialFundersByIndustry, fetchOfficialSpending, fetchOfficialExpenditures, fetchOfficialScorecard, fetchOfficialCommittees, fetchUserEngagement, fetchOfficialAlignment, fetchOfficialLegislativeActivity, fetchOfficialMyVotes, postConstituentVote, fetchUserRecentVotes, fetchCrimeTrend, fetchMisconductCases, fetchOfficialCostToTaxpayers, postOfficialFeedback } from './services/api';
+import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip, fetchOfficialLegislation, fetchOfficialMetrics, fetchOfficialDonors, fetchOfficialFundersByIndustry, fetchOfficialSpending, fetchOfficialExpenditures, fetchOfficialScorecard, fetchOfficialCommittees, fetchUserEngagement, fetchOfficialAlignment, fetchOfficialLegislativeActivity, fetchOfficialMyVotes, postConstituentVote, fetchUserRecentVotes, fetchCrimeTrend, fetchMisconductCases, fetchOfficialCostToTaxpayers, postOfficialFeedback, searchOfficials } from './services/api';
 import { formatStatus, formatResult } from './utils';
 import BackendTypologyQuiz, { getStoredTypology, clearStoredTypology } from './pages/TypologyQuiz';
 import { ResetPasswordScreen } from './pages/PasswordRecovery';
@@ -1159,14 +1159,60 @@ function PostZipQuizPrompt({ onTakeQuiz, onSkip }) {
   );
 }
 
-function ZipOnboarding({ onComplete }) {
+function ZipOnboarding({ onComplete, onOfficialSelect }) {
   const [zip, setZip] = useState('');
   const [error, setError] = useState('');
+  // Search state is kept component-local since this screen owns the
+  // affordance entirely; the parent only receives the final selection via
+  // onOfficialSelect.
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchDebounce, setSearchDebounce] = useState(null);
 
   const submit = (e) => {
     e.preventDefault();
     if (zip.length === 5 && /^\d+$/.test(zip)) onComplete(zip);
     else setError('Please enter a valid 5-digit ZIP code');
+  };
+
+  const handleSearchChange = (val) => {
+    setSearchQuery(val);
+    if (searchDebounce) clearTimeout(searchDebounce);
+    if (val.trim().length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    const t = setTimeout(async () => {
+      const data = await searchOfficials(val);
+      setSearchResults(data.results || []);
+    }, 300);
+    setSearchDebounce(t);
+  };
+
+  const handleSearchSelect = (r) => {
+    setSearchQuery('');
+    setSearchResults([]);
+    // Map the search-result shape to the profile-object shape the rest of the
+    // app expects (matches services/api.js mapOfficial). backendId is the
+    // critical bit — components like CostToTaxpayers consult apiId(o), which
+    // only returns the id when backendId is explicitly set.
+    const partyUp = (r.party || '').toUpperCase();
+    const o = {
+      id: r.id,
+      backendId: r.id,
+      name: r.name,
+      title: r.title,
+      county: r.county,
+      level: r.level,
+      party: r.party || '?',
+      image: r.photo_url || null,
+      color: partyUp.startsWith('R') ? '#dc2626'
+           : partyUp.startsWith('D') ? '#1d4ed8'
+           : '#6b7280',
+      posts: [],
+      _live: true,
+    };
+    if (onOfficialSelect) onOfficialSelect(o, r.zip || null);
   };
 
   return (
@@ -1191,6 +1237,74 @@ function ZipOnboarding({ onComplete }) {
           {error && <p className="zip-error">{error}</p>}
           <p className="zip-note">Free · No ads · No data selling</p>
         </form>
+
+        <div style={{ textAlign: 'center', margin: '12px 0 4px', fontSize: '13px', color: '#94a3b8' }}>
+          or search by name, county, or city
+        </div>
+        <div style={{ position: 'relative', maxWidth: '340px', margin: '0 auto' }}>
+          <input
+            type="text"
+            placeholder="e.g. Rick Staly, Flagler County, Palm Coast"
+            value={searchQuery}
+            onChange={e => handleSearchChange(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '12px 16px',
+              borderRadius: '12px',
+              border: '1px solid #e2e8f0',
+              fontSize: '15px',
+              outline: 'none',
+              boxSizing: 'border-box',
+            }}
+          />
+          {searchResults.length > 0 && (
+            <div style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              right: 0,
+              background: '#fff',
+              border: '1px solid #e2e8f0',
+              borderRadius: '12px',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+              zIndex: 100,
+              maxHeight: '320px',
+              overflowY: 'auto',
+              marginTop: '4px',
+            }}>
+              {searchResults.map(r => (
+                <div
+                  key={r.id}
+                  onClick={() => handleSearchSelect(r)}
+                  style={{
+                    padding: '12px 16px',
+                    cursor: 'pointer',
+                    borderBottom: '1px solid #f1f5f9',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                  onMouseLeave={e => e.currentTarget.style.background = '#fff'}
+                >
+                  <img
+                    src={r.photo_url ||
+                      `https://ui-avatars.com/api/?name=${encodeURIComponent(r.name)}&background=4361ee&color=fff&size=36`}
+                    alt={r.name}
+                    style={{ width: 36, height: 36, borderRadius: '50%', flexShrink: 0 }}
+                  />
+                  <div>
+                    <div style={{ fontWeight: '600', fontSize: '14px', color: '#1e293b' }}>{r.name}</div>
+                    <div style={{ fontSize: '12px', color: '#64748b' }}>
+                      {r.title}{r.county ? ` · ${r.county} County` : ''}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div className="onboard-levels">
           <div className="level-pill">🏛️ Federal</div>
           <div className="level-pill">🌴 State</div>
@@ -9121,7 +9235,20 @@ React.useEffect(() => {
     if (onboardingStep === 'welcome') {
       return <WelcomeOnboarding onContinue={() => setOnboardingStep('zip')} />;
     }
-    return <ZipOnboarding onComplete={(z) => { setZip(z); setOnboardingStep('quiz'); }} />;
+    return <ZipOnboarding
+      onComplete={(z) => { setZip(z); setOnboardingStep('quiz'); }}
+      onOfficialSelect={(o, zipFromSearch) => {
+        // Search-select short-circuits the onboarding flow: the user knows
+        // exactly who they want to see. Set their zip from the result if it
+        // carried one (so feed/explore have context); otherwise fall back to
+        // a generic FL zip the rest of the app can resolve. Mark onboarding
+        // complete and open the profile directly.
+        setZip(zipFromSearch || '32301');
+        try { localStorage.setItem('onboarding_complete', '1'); } catch (_) {}
+        setOnboardingStep('done');
+        openProfile(o);
+      }}
+    />;
   }
   if (zip && !onboardingDone && onboardingStep === 'quiz') {
     return (

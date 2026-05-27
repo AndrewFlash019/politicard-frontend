@@ -182,6 +182,22 @@ export async function fetchOfficialsByZip(zip) {
   }
 }
 
+// Free-text search across FL officials by name, county, city, or title.
+// Returns { results, count }. Sub-2-char queries short-circuit before any
+// network call. Network failures and 4xx/5xx responses both degrade to an
+// empty result rather than throwing, so the caller can just read .results.
+export async function searchOfficials(query) {
+  const q = (query || '').trim();
+  if (q.length < 2) return { results: [], count: 0 };
+  try {
+    const r = await apiFetch(`${BASE_URL}/officials/search?q=${encodeURIComponent(q)}`);
+    if (!r.ok) return { results: [], count: 0 };
+    return await r.json();
+  } catch (_) {
+    return { results: [], count: 0 };
+  }
+}
+
 // Register new user
 export async function registerUser({ email, password, full_name, zip_code }) {
   try {
