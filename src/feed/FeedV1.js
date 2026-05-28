@@ -472,13 +472,27 @@ export default function FeedV1({ zip, userName }) {
           </p>
         </div>
       ) : (() => {
-        const filtered = levelFilter === 'all'
-          ? items
-          : items.filter((it) => (it.official_level || '').toLowerCase() === levelFilter);
+        // Level filtering. The State pill matches BOTH 'state' and 'statewide'
+        // because governor/AG/CFO/state-senate ingest paths fill the column
+        // inconsistently. 'all' returns items as-is (including null-level
+        // entries, since we have no level claim either way).
+        const filtered = (() => {
+          if (levelFilter === 'all') return items;
+          return items.filter((it) => {
+            const lvl = (it.official_level || '').toLowerCase();
+            if (levelFilter === 'state') return lvl === 'state' || lvl === 'statewide';
+            return lvl === levelFilter;
+          });
+        })();
+        // Diagnostic for "feed shows N items but renders nothing" reports —
+        // confirms whether the filter dropped them vs a render bug downstream.
+        // eslint-disable-next-line no-console
+        console.debug('[FeedV1] levelFilter=%s items=%d filtered=%d', levelFilter, items.length, filtered.length);
         const newSinceLastVisit = lastVisitAtLoad
           ? filtered.filter((it) => it.date && new Date(it.date) > new Date(lastVisitAtLoad)).length
           : 0;
         const grouped = groupByOfficial(filtered);
+        const filterLabel = ({all:'all-levels', federal:'federal', state:'state', local:'local'})[levelFilter] || levelFilter;
         return (
           <>
             {newSinceLastVisit > 0 && (
@@ -511,13 +525,28 @@ export default function FeedV1({ zip, userName }) {
                 );
               })}
             </div>
-            <div className="fcv1-stream-list">
-              {grouped.map((g, i) =>
-                g.kind === 'group'
-                  ? <GroupedVotes key={`g-${i}-${g.who}`} group={g} onVote={onVote} />
-                  : <StreamCard key={g.item.id} item={g.item} onVote={onVote} />
-              )}
-            </div>
+            {filtered.length === 0 ? (
+              // Without this, a filter that matches nothing (e.g. "State"
+              // when the recent-50 are all federal-level Senate votes)
+              // renders an empty stream list — looks indistinguishable from
+              // a broken page. Tell the user the filter is working but empty.
+              <div className="fcv1-empty-stream" style={{padding:'1.25rem 1rem'}}>
+                <p style={{margin:0, fontWeight:700, color:'var(--text-1, #0f172a)'}}>
+                  No {filterLabel} activity in your recent feed.
+                </p>
+                <p style={{fontSize:'0.85rem', color:'var(--text-3, #64748b)', marginTop:'0.4rem'}}>
+                  Switch to <strong>All levels</strong> or try "Load more" — your reps at this level may have older activity that hasn't surfaced in the most recent {items.length} item{items.length === 1 ? '' : 's'} yet.
+                </p>
+              </div>
+            ) : (
+              <div className="fcv1-stream-list">
+                {grouped.map((g, i) =>
+                  g.kind === 'group'
+                    ? <GroupedVotes key={`g-${i}-${g.who}`} group={g} onVote={onVote} />
+                    : <StreamCard key={g.item.id} item={g.item} onVote={onVote} />
+                )}
+              </div>
+            )}
           </>
         );
       })()}
