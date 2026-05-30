@@ -824,11 +824,19 @@ export async function fetchUserRecentVotes(userId, { limit = 10 } = {}) {
 }
 
 // ─── Typology quiz ───────────────────────────────────────────────────────────
+// Quiz endpoints get a 45s timeout instead of the default 20s. The backend
+// lives on Render's free tier and spins down after ~15min idle; a cold start
+// can take 30-50s. Users hit "Take the quiz" rarely enough that they almost
+// always trigger that cold start, and a 20s abort surfaces as "Failed to
+// fetch" in the UI.
+const QUIZ_TIMEOUT_MS = 45000;
+
 export async function fetchTypologyQuestions() {
   try {
     const r = await apiFetch(`${BASE_URL}/typology/questions`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
+      timeoutMs: QUIZ_TIMEOUT_MS,
     });
     if (!r.ok) throw new Error(`Backend returned ${r.status}`);
     return { success: true, data: await r.json() };
@@ -844,6 +852,7 @@ export async function submitTypologyQuiz({ userId, answers }) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ user_id: userId, answers }),
+      timeoutMs: QUIZ_TIMEOUT_MS,
     });
     if (!r.ok) throw new Error(`Backend returned ${r.status}`);
     return { success: true, data: await r.json() };
