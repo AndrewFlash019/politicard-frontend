@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import './App.css';
-import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip, fetchOfficialLegislation, fetchOfficialMetrics, fetchOfficialDonors, fetchOfficialFundersByIndustry, fetchOfficialSpending, fetchOfficialExpenditures, fetchOfficialScorecard, fetchOfficialCommittees, fetchUserEngagement, fetchOfficialAlignment, fetchOfficialLegislativeActivity, fetchOfficialMyVotes, postConstituentVote, fetchUserRecentVotes, fetchCrimeTrend, fetchMisconductCases, fetchOfficialCostToTaxpayers, postOfficialFeedback, searchOfficials } from './services/api';
+import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip, fetchOfficialLegislation, fetchOfficialMetrics, fetchOfficialDonors, fetchOfficialFundersByIndustry, fetchOfficialSpending, fetchOfficialExpenditures, fetchOfficialScorecard, fetchOfficialCommittees, fetchUserEngagement, fetchOfficialAlignment, fetchOfficialLegislativeActivity, fetchOfficialMyVotes, postConstituentVote, fetchUserRecentVotes, fetchCrimeTrend, fetchMisconductCases, fetchOfficialCostToTaxpayers, postOfficialFeedback, searchOfficials, fetchMyProfile } from './services/api';
 import { formatStatus, formatResult } from './utils';
 import BackendTypologyQuiz, { getStoredTypology, clearStoredTypology } from './pages/TypologyQuiz';
 import { ResetPasswordScreen } from './pages/PasswordRecovery';
@@ -9237,7 +9237,28 @@ React.useEffect(() => {
     return () => window.removeEventListener('politiscore:auth-expired', onExpired);
   }, []);
 
-  const userName = 'Andrew';
+  // SECURITY: never hardcode or guess a display name. Only show a name that
+  // came back from /users/me on this device's own token. The login-cached
+  // `user` object only carries an email, so we refresh from the server on
+  // mount; failure (no token / 401) leaves authedFullName null and the
+  // WelcomeBack header falls back to the generic "voter" copy. The greeting
+  // is also gated by `if (!user) return <Login />` upstream, so logged-out
+  // visitors never reach this branch at all.
+  const [authedFullName, setAuthedFullName] = React.useState(null);
+  React.useEffect(() => {
+    if (!user) { setAuthedFullName(null); return; }
+    let cancelled = false;
+    fetchMyProfile().then((res) => {
+      if (cancelled) return;
+      if (res.success && res.data && res.data.full_name) {
+        setAuthedFullName(res.data.full_name);
+      } else {
+        setAuthedFullName(null);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [user]);
+  const userName = authedFullName;
 
   const recordPollVote = (pollId, choice) => setPollVotes(prev => prev.some(v => v.pollId === pollId) ? prev : [...prev, { pollId, choice }]);
 
