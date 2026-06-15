@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import './App.css';
-import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip, fetchOfficialLegislation, fetchOfficialMetrics, fetchOfficialDonors, fetchOfficialFundersByIndustry, fetchOfficialSpending, fetchOfficialExpenditures, fetchOfficialScorecard, fetchOfficialCommittees, fetchUserEngagement, fetchOfficialAlignment, fetchOfficialLegislativeActivity, fetchOfficialMyVotes, postConstituentVote, fetchUserRecentVotes, fetchCrimeTrend, fetchMisconductCases, fetchOfficialCostToTaxpayers, postOfficialFeedback, searchOfficials, fetchMyProfile } from './services/api';
+import { fetchOfficialsByZip, fetchFeedByZip, fetchMetricsByZip, fetchOfficialLegislation, fetchOfficialMetrics, fetchOfficialDonors, fetchOfficialFundersByIndustry, fetchOfficialSpending, fetchOfficialExpenditures, fetchOfficialScorecard, fetchOfficialCommittees, fetchUserEngagement, fetchOfficialAlignment, fetchOfficialLegislativeActivity, fetchOfficialMyVotes, postConstituentVote, fetchUserRecentVotes, fetchCrimeTrend, fetchMisconductCases, fetchOfficialCostToTaxpayers, postOfficialFeedback, searchOfficials, fetchMyProfile, fetchAnnouncementsStream } from './services/api';
 import { formatStatus, formatResult } from './utils';
 import BackendTypologyQuiz, { getStoredTypology, clearStoredTypology } from './pages/TypologyQuiz';
 import { ResetPasswordScreen } from './pages/PasswordRecovery';
@@ -9085,11 +9085,269 @@ function OfficialProfile({ official: o, onBack, likes, onLike, zip }) {
   );
 }
 
+// ─── Public Notices tab ────────────────────────────────────────────────────
+// Consumes /announcements/{zip}/stream, which serves announcement_daily_digest
+// rows (one per category+county+municipality+notice_date bucket). The view is
+// intentionally distinct from feed_cards / accountability content — different
+// data source, different obligations (public notices are legally mandated,
+// not editorial). The visual language mirrors the feed cards (rounded white
+// card, soft border, indigo accents) so the app feels coherent.
+
+const NOTICE_CATEGORY_ICONS = {
+  meeting:    '🏛️',
+  ordinance:  '📜',
+  land_use:   '🗺️',
+  budget:     '💰',
+  hearing:    '⚖️',
+};
+
+function noticeCategoryIcon(category) {
+  return NOTICE_CATEGORY_ICONS[(category || '').toLowerCase()] || '📢';
+}
+
+function noticeCategoryLabel(category) {
+  if (!category) return 'Notice';
+  return category
+    .split('_')
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
+function formatNoticeDate(iso) {
+  if (!iso) return null;
+  try {
+    return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch (_e) { return iso; }
+}
+
+function NoticeDigestCard({ row }) {
+  const [open, setOpen] = useState(false);
+  const items = Array.isArray(row.items) ? row.items : [];
+  const headerDate = formatNoticeDate(row.notice_date);
+  const headerLine = row.municipality
+    ? `${row.municipality}, ${row.county} County`
+    : `${row.county} County`;
+  return (
+    <div style={{
+      margin: '0.5rem 0',
+      background: 'var(--card)',
+      borderRadius: '0.75rem',
+      border: '1px solid var(--border)',
+      overflow: 'hidden',
+    }}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        style={{
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.6rem',
+          padding: '0.8rem 0.95rem',
+          background: 'transparent',
+          border: 'none',
+          textAlign: 'left',
+          cursor: 'pointer',
+        }}
+      >
+        <span aria-hidden="true" style={{fontSize:'1.2rem'}}>{noticeCategoryIcon(row.category)}</span>
+        <div style={{flex:1, minWidth:0}}>
+          <div style={{fontSize:'0.85rem', fontWeight:700, color:'var(--text-1)', lineHeight:1.3}}>
+            {headerLine}
+          </div>
+          <div style={{fontSize:'0.7rem', color:'#64748b', marginTop:'0.15rem'}}>
+            {noticeCategoryLabel(row.category)}
+            {headerDate ? ` · ${headerDate}` : ''}
+          </div>
+        </div>
+        <span style={{
+          fontSize:'0.7rem',
+          fontWeight:800,
+          background:'#eef2ff',
+          color:'#4338ca',
+          padding:'0.2rem 0.55rem',
+          borderRadius:'999px',
+          letterSpacing:'0.02em',
+        }}>
+          {row.item_count} {row.item_count === 1 ? 'item' : 'items'}
+        </span>
+        <span aria-hidden="true" style={{color:'#94a3b8', fontSize:'0.75rem', marginLeft:'0.2rem'}}>
+          {open ? '▾' : '▸'}
+        </span>
+      </button>
+
+      {open && (
+        <div style={{borderTop:'1px solid var(--border)', padding:'0.5rem 0.95rem 0.85rem'}}>
+          {items.length === 0 ? (
+            <div style={{fontSize:'0.75rem', color:'#94a3b8', padding:'0.5rem 0'}}>
+              No item detail available for this notice.
+            </div>
+          ) : items.map((it, idx) => {
+            const evDate = formatNoticeDate(it.event_date);
+            return (
+              <div
+                key={it.id ?? idx}
+                style={{
+                  padding: '0.55rem 0',
+                  borderBottom: idx < items.length - 1 ? '1px dashed #e2e8f0' : 'none',
+                }}
+              >
+                <div style={{fontSize:'0.8rem', fontWeight:700, color:'var(--text-1)', lineHeight:1.3}}>
+                  {it.title || 'Untitled notice'}
+                </div>
+                <div style={{
+                  display:'flex',
+                  flexWrap:'wrap',
+                  gap:'0.4rem 0.6rem',
+                  marginTop:'0.2rem',
+                  fontSize:'0.7rem',
+                  color:'#64748b',
+                }}>
+                  {it.jurisdiction && <span>🏷️ {it.jurisdiction}</span>}
+                  {evDate && <span>📅 {evDate}</span>}
+                </div>
+                {it.summary && (
+                  <div style={{fontSize:'0.75rem', color:'var(--text-2)', marginTop:'0.3rem', lineHeight:1.4}}>
+                    {it.summary}
+                  </div>
+                )}
+                {it.source_url && (
+                  <a
+                    href={it.source_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display:'inline-block',
+                      marginTop:'0.3rem',
+                      fontSize:'0.7rem',
+                      color:'var(--accent)',
+                      textDecoration:'none',
+                      fontWeight:600,
+                    }}
+                  >
+                    View source →
+                  </a>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NoticesTab({ zip }) {
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState(null);
+  const [data, setData] = React.useState(null);
+
+  React.useEffect(() => {
+    if (!zip) return;
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    fetchAnnouncementsStream(zip).then(res => {
+      if (cancelled) return;
+      if (res.success) {
+        setData(res.data);
+      } else {
+        setError(res.error || 'Failed to load notices');
+      }
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [zip]);
+
+  const county = data?.county;
+  const rows = Array.isArray(data?.items) ? data.items : [];
+
+  return (
+    <div style={{padding:'0.5rem 1rem 1rem'}}>
+      <div style={{margin:'0.4rem 0 0.65rem'}}>
+        <h2 style={{fontSize:'1.05rem', fontWeight:800, color:'var(--text-1)', margin:0}}>
+          📢 Public Notices
+        </h2>
+        <div style={{fontSize:'0.7rem', color:'#64748b', marginTop:'0.15rem'}}>
+          Legally-mandated meeting notices and public hearings
+          {county ? ` for ${county} County` : ''}.
+        </div>
+      </div>
+
+      {loading && (
+        <div style={{
+          padding:'1.25rem 0.95rem',
+          background:'var(--card)',
+          border:'1px solid var(--border)',
+          borderRadius:'0.75rem',
+          fontSize:'0.78rem',
+          color:'#64748b',
+          textAlign:'center',
+        }}>
+          Loading notices…
+        </div>
+      )}
+
+      {!loading && error && (
+        <div style={{
+          padding:'1rem 0.95rem',
+          background:'#fef2f2',
+          border:'1px solid #fecaca',
+          borderRadius:'0.75rem',
+          fontSize:'0.78rem',
+          color:'#991b1b',
+        }}>
+          Couldn't load notices right now. {error ? <span style={{opacity:0.7}}>({error})</span> : null}
+        </div>
+      )}
+
+      {!loading && !error && !county && (
+        <div style={{
+          padding:'1.25rem 0.95rem',
+          background:'var(--card)',
+          border:'1px dashed var(--border)',
+          borderRadius:'0.75rem',
+          fontSize:'0.78rem',
+          color:'#64748b',
+          textAlign:'center',
+        }}>
+          We couldn't map ZIP {zip} to a Florida county yet.
+        </div>
+      )}
+
+      {!loading && !error && county && rows.length === 0 && (
+        <div style={{
+          padding:'1.25rem 0.95rem',
+          background:'var(--card)',
+          border:'1px dashed var(--border)',
+          borderRadius:'0.75rem',
+          fontSize:'0.78rem',
+          color:'#64748b',
+          textAlign:'center',
+        }}>
+          No public notices posted for {county} County right now. Check back as
+          meeting agendas are published.
+        </div>
+      )}
+
+      {!loading && !error && rows.length > 0 && rows.map((row, idx) => (
+        <NoticeDigestCard
+          key={`${row.category}-${row.municipality || 'county'}-${row.notice_date}-${idx}`}
+          row={row}
+        />
+      ))}
+    </div>
+  );
+}
+
 // ─── NAV & SHELL ────────────────────────────────────────────────────────────
 
 function BottomNav({ active, onChange, unreadNotifs = 0 }) {
   const tabs = [
     { id:'feed', icon:'🏠', label:'Feed' },
+    { id:'notices', icon:'📢', label:'Notices' },
     { id:'explore', icon:'🔍', label:'Explore' },
     { id:'notifications', icon:'🔔', label:'Activity', badge: unreadNotifs },
     { id:'profile', icon:'👤', label:'Profile' },
@@ -9308,7 +9566,7 @@ React.useEffect(() => {
       document.title = `${profile.name} — PolitiScore`;
       analytics.trackProfileView(profile.id);
     } else {
-      const labels = { feed:'Feed', explore:'Explore', notifications:'Activity', profile:'My Profile' };
+      const labels = { feed:'Feed', notices:'Notices', explore:'Explore', notifications:'Activity', profile:'My Profile' };
       document.title = `${labels[tab] || ''} — PolitiScore`.trim().replace(/^—\s*/, '');
       analytics.trackPageView(tab);
     }
@@ -9394,7 +9652,7 @@ React.useEffect(() => {
     );
   }
 
-  const tabTitles = { feed:'PolitiScore', explore:'Explore', notifications:'Activity', profile:'My Profile' };
+  const tabTitles = { feed:'PolitiScore', notices:'Notices', explore:'Explore', notifications:'Activity', profile:'My Profile' };
   const totalLocations = 1 + followedLocations.length;
 
   return (
@@ -9459,6 +9717,7 @@ React.useEffect(() => {
                 <FeedV1 zip={zip} userName={userName} />
               </>
             )}
+            {tab==='notices' && <NoticesTab zip={zip} />}
 {tab==='explore' && <ExploreTab onProfile={openProfile} liveOfficials={liveOfficials} zip={zip} countyMetrics={countyMetrics} />}
             {tab==='notifications' && <NotificationsTab onProfile={openProfile} readNotifIds={readNotifIds} onReadNotif={id => setReadNotifIds(prev => prev.includes(id) ? prev : [...prev, id])} />}
             {tab==='profile' && <MyProfileTab zip={zip} userName={userName} userPhoto={userPhoto} onPhotoChange={setUserPhoto} postsRead={readPostIds.size} likes={likes} followedLocations={followedLocations} onManageLocations={() => setShowLocModal(true)} pollVotesCount={pollVotes.length} pinnedPosts={pinnedPosts} onUnpin={(id) => setPinnedPosts(prev => prev.filter(p => p.id !== id))} onLogout={handleLogout} liveOfficials={liveOfficials} liveFeedItems={liveFeedItems} onTakeQuiz={() => setShowQuizOverlay(true)} />}
