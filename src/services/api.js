@@ -236,6 +236,32 @@ export async function loginUser({ email, password }) {
   }
 }
 
+// Fetch the authenticated caller's own profile from /users/me. The backend
+// validates the JWT and returns only that user's row (UserResponse schema —
+// never hashed_password or recovery_token). Returns { success, data } with
+// data.full_name when authenticated; { success:false } on missing/invalid
+// token (apiFetch fires the politiscore:auth-expired event on 401).
+export async function fetchMyProfile() {
+  const token = window._psToken || localStorage.getItem('politiscore_token') || '';
+  if (!token) return { success: false, error: 'no_token' };
+  try {
+    const response = await apiFetch(`${BASE_URL}/users/me`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+    if (!response.ok) {
+      return { success: false, error: `status_${response.status}` };
+    }
+    const data = await response.json();
+    return { success: true, data };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
 // Logout
 export function logoutUser() {
   window._psToken = null;
