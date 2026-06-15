@@ -625,6 +625,24 @@ export async function fetchFeedStream(zip, { limit = 50, offset = 0 } = {}) {
   }
 }
 
+// ─── Notices: public-notice digests for the user's ZIP ─────────────────────
+// Backed by /announcements/{zip}/stream which reads announcement_daily_digest.
+// One returned row per (category, county, municipality, notice_date) bucket;
+// each row carries an items[] array the UI expands inline.
+export async function fetchAnnouncementsStream(zip, { limit = 50, offset = 0 } = {}) {
+  try {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    const url = `${BASE_URL}/announcements/${zip}/stream?${params.toString()}`;
+    const r = await apiFetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' }, timeoutMs: 30000 });
+    if (!r.ok) throw new Error(`Backend returned ${r.status}`);
+    const data = await r.json();
+    return { success: true, data };
+  } catch (err) {
+    console.error('PolitiCard notices error:', err);
+    return { success: false, data: null, error: String(err.message || err) };
+  }
+}
+
 // ─── Constituent vote: support / oppose / neutral on a feed card ────────────
 let _ANON_USER_ID = null;
 function anonUserId() {
