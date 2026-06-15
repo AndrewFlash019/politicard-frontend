@@ -7588,8 +7588,11 @@ function OfficialMetricsCard({ items }) {
   const header = deriveMetricsHeader(items);
   return (
     <div style={{margin:'0.75rem 1rem', padding:'0.85rem 0.95rem', background:'linear-gradient(135deg, #eef2ff 0%, #f5f3ff 100%)', border:'1px solid #e0e7ff', borderRadius:'0.85rem'}}>
-      <div style={{fontSize:'0.7rem', fontWeight:800, color:'#475569', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'0.55rem'}}>
+      <div style={{fontSize:'0.7rem', fontWeight:800, color:'#475569', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'0.15rem'}}>
         {header}
+      </div>
+      <div style={{fontSize:'0.62rem', color:'#64748b', marginBottom:'0.55rem', fontStyle:'italic'}}>
+        County / jurisdiction context — not this official's individual record.
       </div>
       <div style={{display:'flex', flexWrap:'wrap', gap:'0.45rem'}}>
         {items.map((m, idx) => (
@@ -8155,6 +8158,42 @@ function MetricsPills({ metrics }) {
   );
 }
 
+function ActivityMetricsCard({ metrics, officialName }) {
+  if (!metrics || !metrics.total_actions) return null;
+  const fmtDate = (iso) => {
+    if (!iso) return null;
+    try {
+      return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    } catch (_e) { return iso; }
+  };
+  const range = (metrics.first_action_date && metrics.last_action_date)
+    ? `${fmtDate(metrics.first_action_date)} – ${fmtDate(metrics.last_action_date)}`
+    : null;
+  const cell = (label, value) => (
+    <div style={{flex:'1 1 6rem', minWidth:'6rem', background:'#ffffff', border:'1px solid #e0e7ff', borderRadius:'0.55rem', padding:'0.45rem 0.6rem'}}>
+      <div style={{fontSize:'0.55rem', fontWeight:800, color:'#4338ca', textTransform:'uppercase', letterSpacing:'0.05em'}}>{label}</div>
+      <div style={{fontSize:'1.1rem', fontWeight:800, color:'#1e293b'}}>{value}</div>
+    </div>
+  );
+  return (
+    <div style={{marginTop:'0.6rem', padding:'0.7rem 0.85rem', background:'linear-gradient(135deg, #eef2ff 0%, #f5f3ff 100%)', border:'1px solid #c7d2fe', borderRadius:'0.7rem'}}>
+      <div style={{fontSize:'0.62rem', fontWeight:800, color:'#4338ca', textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:'0.45rem'}}>
+        {officialName ? `${officialName}'s Recorded Actions` : 'Recorded Actions'}
+      </div>
+      <div style={{display:'flex', flexWrap:'wrap', gap:'0.4rem'}}>
+        {cell('Total actions',  metrics.total_actions)}
+        {cell('Motions made',   metrics.motions_made)}
+        {cell('Seconds',        metrics.seconds)}
+      </div>
+      {range && (
+        <div style={{marginTop:'0.45rem', fontSize:'0.68rem', color:'#475569'}}>
+          Activity tracked {range}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AccountabilityScorecardSection({ scorecard, loading, officialId }) {
   if (loading) {
     return (
@@ -8229,6 +8268,9 @@ function AccountabilityScorecardSection({ scorecard, loading, officialId }) {
           Accountability metrics for this role are being ingested. Check back soon.
         </div>
       )}
+
+      {/* Per-official action counts from feed_cards (local officials only) */}
+      <ActivityMetricsCard metrics={scorecard.activity_metrics} officialName={scorecard.official_name} />
 
       {/* Metric grid — split haveData (always visible) from no_data (collapsed) */}
       {metrics.length > 0 && <ScorecardMetricsGrid metrics={metrics} officialId={officialId} />}
