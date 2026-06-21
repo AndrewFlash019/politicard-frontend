@@ -8017,143 +8017,242 @@ function MetricCard({ metric, officialId }) {
   );
 }
 
-function MetricsPills({ metrics }) {
-  if (!metrics || metrics.length === 0) return null;
+// Symbol vs word units: "%" sits flush against the number, " cases" reads
+// as English. Shared between the value+benchmark renderers.
+function _fmtUnit(value, unit) {
+  if (value == null || value === '') return '';
+  if (!unit) return String(value);
+  return unit.match(/^[%$€£°]/) ? `${value}${unit}` : `${value} ${unit}`;
+}
 
-  const RATING_STYLES = {
-    excellent:    { bg: '#059669', text: '#ffffff' },
-    good:         { bg: '#16a34a', text: '#ffffff' },
-    meeting:      { bg: '#0284c7', text: '#ffffff' },
-    concerning:   { bg: '#d97706', text: '#ffffff' },
-    poor:         { bg: '#dc2626', text: '#ffffff' },
-    failing:      { bg: '#dc2626', text: '#ffffff' },
-    no_data:      null,  // skip
-    awaiting_data: null, // skip
-  };
+// Best-effort numeric extract for the above/below indicator. Strips %, $,
+// commas; returns null on non-numeric strings so we can show no arrow on
+// ordinal grades or text-only values.
+function _numFromMetricValue(v) {
+  if (v == null) return null;
+  const s = String(v).replace(/[%$,\s]/g, '').replace(/[^\d.\-]/g, '');
+  if (!s) return null;
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : null;
+}
 
-  // Deduplicate: for each metric key, keep the entry with the highest year.
-  // The backend returns the short field names (key/rating/label/value/unit);
-  // earlier scorecard sketches used the prefixed metric_* / performance_rating
-  // names. We accept either shape so this doesn't silently render blank chips
-  // if the API ever flips back.
-  const deduped = Object.values(
-    metrics.reduce((acc, m) => {
-      const key = m.metric_key || m.key;
-      if (!acc[key] || (m.year || 0) > (acc[key].year || 0)) {
-        acc[key] = m;
-      }
-      return acc;
-    }, {})
-  );
+// Plain-text placeholder strings the scorecard backend uses for rows it
+// hasn't ingested yet. Treated as "Awaiting data", never rendered as a
+// number or benchmarked.
+const _PLACEHOLDER_VALUES = new Set(['', 'no public data', 'awaiting data ingestion']);
+function _isPlaceholderValue(v) {
+  return _PLACEHOLDER_VALUES.has(String(v || '').trim().toLowerCase());
+}
 
-  const realMetrics = deduped.filter(m => {
-    const rating = m.performance_rating || m.rating || m.tier;
-    return rating && RATING_STYLES[rating] !== null && RATING_STYLES[rating] !== undefined;
-  });
-
-  const awaitingCount = deduped.length - realMetrics.length;
-
-  if (realMetrics.length === 0 && awaitingCount === 0) return null;
-
+function MetricFootnote({ m }) {
+  // The on-demand traceability layer. Surfaces the four pieces the spec
+  // calls for: why_it_matters, how_calculated, benchmark_method,
+  // source/source_url. Renders only the parts the backend actually
+  // provided — silent omission on a missing field beats placeholder text.
   return (
-    <div style={{ marginTop: '16px', paddingLeft: '16px', paddingRight: '16px', boxSizing: 'border-box', width: '100%' }}>
-      <div style={{
-        fontSize: '11px',
-        fontWeight: '600',
-        color: '#64748b',
-        textTransform: 'uppercase',
-        letterSpacing: '0.05em',
-        marginBottom: '10px'
-      }}>
-        Performance Metrics
-        {realMetrics.length > 0 && (
-          <span style={{ fontWeight: '400', marginLeft: '6px', textTransform: 'none', letterSpacing: 0 }}>
-            {realMetrics.length} tracked
-          </span>
-        )}
-      </div>
-
-      {realMetrics.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-          {realMetrics.map((m, i) => {
-            const rating = m.performance_rating || m.rating || m.tier;
-            const key = m.metric_key || m.key;
-            const label = m.metric_label || m.label;
-            const value = m.metric_value || m.value;
-            const unit = m.metric_unit || m.unit;
-            const style = RATING_STYLES[rating];
-            // Symbol units (%, $, €, £, °) sit flush against the number; word
-            // units ("cases", "incidents", etc.) get a space so they read as English.
-            const valueDisplay = value && value !== 'Awaiting data ingestion'
-              ? (unit
-                  ? (unit.match(/^[%$€£°]/) ? `${value}${unit}` : `${value} ${unit}`)
-                  : value)
-              : null;
-
-            return (
-              <div
-                key={`${key}-${i}`}
-                title={[
-                  label,
-                  m.benchmark_label ? `Benchmark: ${m.benchmark_label}` : null,
-                  m.source ? `Source: ${m.source}` : null,
-                  m.year ? `Year: ${m.year}` : null
-                ].filter(Boolean).join(' · ')}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '5px',
-                  backgroundColor: style.bg,
-                  color: style.text,
-                  borderRadius: '20px',
-                  padding: '4px 10px',
-                  fontSize: '12px',
-                  fontWeight: '500',
-                  lineHeight: '1.3',
-                  cursor: 'default',
-                  userSelect: 'none',
-                }}
-              >
-                {/* Ellipsis lives on the label span, not the pill div — putting
-                    overflow:hidden on the inline-flex pill clipped the rounded
-                    corners on the left. Full label remains in the title attribute. */}
-                <span style={{
-                  display: 'block',
-                  maxWidth: '180px',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}>{label}</span>
-                {valueDisplay && (
-                  <span style={{
-                    opacity: 0.85,
-                    fontSize: '11px',
-                    fontWeight: '600',
-                    borderLeft: '1px solid rgba(255,255,255,0.4)',
-                    paddingLeft: '5px',
-                    marginLeft: '1px'
-                  }}>
-                    {valueDisplay}
-                  </span>
-                )}
-              </div>
-            );
-          })}
+    <div style={{
+      marginTop: '6px', padding: '0.65rem 0.75rem',
+      background: '#f8fafc', border: '1px solid #e2e8f0',
+      borderRadius: '0.55rem', fontSize: '0.78rem',
+      color: '#0f172a', lineHeight: 1.45,
+    }}>
+      {m.why_it_matters && (
+        <div style={{ marginBottom: 6 }}>
+          <span style={{ fontWeight: 800, color: '#334155' }}>Why it matters: </span>
+          {m.why_it_matters}
         </div>
       )}
-
-      {awaitingCount > 0 && (
-        <div style={{
-          marginTop: realMetrics.length > 0 ? '8px' : '0',
-          fontSize: '11px',
-          color: '#94a3b8'
-        }}>
-          {awaitingCount} metric{awaitingCount !== 1 ? 's' : ''} awaiting data
+      {m.how_calculated && (
+        <div style={{ marginBottom: 6 }}>
+          <span style={{ fontWeight: 800, color: '#334155' }}>How it's calculated: </span>
+          {m.how_calculated}
+        </div>
+      )}
+      {m.benchmark_method && (
+        <div style={{ marginBottom: 6 }}>
+          <span style={{ fontWeight: 800, color: '#334155' }}>Benchmark: </span>
+          {m.benchmark_method}
+        </div>
+      )}
+      {(m.source || m.source_url) && (
+        <div style={{ fontSize: '0.72rem', color: '#475569' }}>
+          <span style={{ color: '#64748b' }}>Source: </span>
+          {m.source_url ? (
+            <a href={m.source_url} target="_blank" rel="noopener noreferrer"
+               style={{ color: '#4f46e5', textDecoration: 'none', fontWeight: 600 }}>
+              {m.source || m.source_url}
+            </a>
+          ) : (
+            <span>{m.source}</span>
+          )}
+          {m.year ? <span style={{ color: '#94a3b8' }}> · {m.year}</span> : null}
+        </div>
+      )}
+      {!m.why_it_matters && !m.how_calculated && !m.benchmark_method && !m.source && (
+        <div style={{ color: '#64748b' }}>
+          Definition not yet attached for this metric.
         </div>
       )}
     </div>
   );
 }
+
+function MetricsPills({ metrics }) {
+  // expanded keys live in component state so a tap toggles per-pill
+  // without forcing a roundtrip or modal. Using metric key (not index)
+  // so dedupe + sort don't dislodge an open footnote.
+  const [expanded, setExpanded] = React.useState(() => new Set());
+  const toggle = (key) => setExpanded((prev) => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
+
+  if (!metrics || metrics.length === 0) return null;
+
+  // Deduplicate: latest year per metric key. Backend may return short
+  // (key/label/value) or prefixed (metric_*/performance_rating) shape;
+  // accept either.
+  const deduped = Object.values(
+    metrics.reduce((acc, m) => {
+      const key = m.metric_key || m.key;
+      if (!acc[key] || (m.year || 0) > (acc[key].year || 0)) acc[key] = m;
+      return acc;
+    }, {})
+  );
+  const real = deduped.filter((m) => !_isPlaceholderValue(m.metric_value || m.value));
+  const awaiting = deduped.filter((m) => _isPlaceholderValue(m.metric_value || m.value));
+
+  if (real.length === 0 && awaiting.length === 0) return null;
+
+  return (
+    <div style={{ marginTop: 16, padding: '0 16px', boxSizing: 'border-box', width: '100%' }}>
+      <div style={{
+        fontSize: '11px', fontWeight: 600, color: '#64748b',
+        textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10,
+      }}>
+        Performance Metrics
+        {real.length > 0 && (
+          <span style={{ fontWeight: 400, marginLeft: 6, textTransform: 'none', letterSpacing: 0 }}>
+            {real.length} tracked
+          </span>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        {real.map((m, i) => {
+          const key = m.metric_key || m.key;
+          const label = m.metric_label || m.label;
+          const value = m.metric_value || m.value;
+          const unit = m.metric_unit || m.unit;
+          const benchValue = m.benchmark_value;
+          const benchLabel = m.benchmark_label;
+          const valueDisplay = _fmtUnit(value, unit);
+          const benchDisplay = benchValue != null && benchValue !== ''
+            ? (benchLabel || `peer median: ${_fmtUnit(benchValue, unit)}`)
+            : null;
+
+          // Neutral above/below indicator. Only fires when both sides
+          // are numeric — ordinal grades stay arrow-free, so we don't
+          // imply directional verdict on a letter.
+          const vNum = _numFromMetricValue(value);
+          const bNum = _numFromMetricValue(benchValue);
+          let indicator = null;
+          if (vNum != null && bNum != null && benchDisplay) {
+            if (Math.abs(vNum - bNum) < 1e-9) {
+              indicator = { glyph: '=', color: '#64748b', label: 'at peer median' };
+            } else if (vNum > bNum) {
+              indicator = { glyph: '↑', color: '#0f766e', label: 'above peer median' };
+            } else {
+              indicator = { glyph: '↓', color: '#9a3412', label: 'below peer median' };
+            }
+          }
+
+          const isOpen = expanded.has(key);
+          return (
+            <div key={`${key}-${i}`} style={pillCard}>
+              <button
+                type="button"
+                onClick={() => toggle(key)}
+                aria-expanded={isOpen}
+                style={pillButton}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={pillLabel}>{label}</div>
+                  <div style={pillValueRow}>
+                    <span style={pillValue}>{valueDisplay}</span>
+                    {benchDisplay && (
+                      <span style={pillBench}>
+                        {indicator && (
+                          <span title={indicator.label} style={{
+                            color: indicator.color, fontWeight: 800, marginRight: 4,
+                          }}>{indicator.glyph}</span>
+                        )}
+                        {benchDisplay}
+                      </span>
+                    )}
+                    {m.year ? (
+                      <span style={pillYear}>· {m.year}</span>
+                    ) : null}
+                  </div>
+                </div>
+                <span style={pillCaret} aria-hidden="true">
+                  {isOpen ? '▾ how is this measured?' : '▸ how is this measured?'}
+                </span>
+              </button>
+              {isOpen && <MetricFootnote m={m} />}
+            </div>
+          );
+        })}
+
+        {awaiting.map((m, i) => {
+          const key = m.metric_key || m.key;
+          const label = m.metric_label || m.label;
+          return (
+            <div key={`awaiting-${key}-${i}`} style={{
+              ...pillCard, background: '#f8fafc',
+            }}>
+              <div style={{ ...pillButton, cursor: 'default' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={pillLabel}>{label}</div>
+                  <div style={{ ...pillValueRow, color: '#94a3b8' }}>
+                    Awaiting data
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const pillCard = {
+  background: '#ffffff', border: '1px solid #e2e8f0',
+  borderRadius: '0.6rem', overflow: 'hidden',
+};
+const pillButton = {
+  width: '100%', display: 'flex', alignItems: 'flex-start',
+  gap: '8px', padding: '0.55rem 0.75rem',
+  background: 'transparent', border: 'none', textAlign: 'left',
+  cursor: 'pointer',
+};
+const pillLabel = {
+  fontSize: '0.82rem', fontWeight: 700, color: '#0f172a',
+  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+};
+const pillValueRow = {
+  marginTop: 2, fontSize: '0.75rem', color: '#334155',
+  display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 6,
+};
+const pillValue = { fontWeight: 800, color: '#0f172a' };
+const pillBench = { color: '#475569' };
+const pillYear = { color: '#94a3b8', fontSize: '0.7rem' };
+const pillCaret = {
+  fontSize: '0.68rem', color: '#6366f1', fontWeight: 700,
+  whiteSpace: 'nowrap', alignSelf: 'center',
+};
 
 function AccountabilityScorecardSection({ scorecard, loading, officialId }) {
   if (loading) {
