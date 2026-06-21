@@ -905,3 +905,38 @@ export async function submitTypologyQuiz({ userId, answers }) {
     return { success: false, data: null, error: String(err.message || err) };
   }
 }
+
+// Composite roll-up for chief-executive offices and the shared-context
+// layer of collegial bodies. Returns components + per-component
+// benchmark_method so the UI can render the drill-down + footnote
+// without a second round-trip.
+export async function fetchOfficialComposite(officialId) {
+  try {
+    const r = await apiFetch(`${BASE_URL}/api/v1/officials/${officialId}/composite`);
+    if (r.status === 404) return { success: true, data: null };
+    if (!r.ok) throw new Error(`Backend returned ${r.status}`);
+    return { success: true, data: await r.json() };
+  } catch (err) {
+    console.error('PolitiScore composite error:', err);
+    return { success: false, data: null, error: String(err.message || err) };
+  }
+}
+
+// fl_municipalities row for the official's city — drives the
+// strong_mayor / council_manager / null treatment in the input-output
+// loop. The endpoint may not exist yet (Phase 3b); a 404 is treated as
+// "no row" rather than an error so the UI falls back to the neutral
+// default.
+export async function fetchMunicipalityForm(city, county) {
+  if (!city) return { success: true, data: null };
+  try {
+    const qs = new URLSearchParams({ city, ...(county ? { county } : {}) }).toString();
+    const r = await apiFetch(`${BASE_URL}/api/v1/municipalities?${qs}`);
+    if (r.status === 404) return { success: true, data: null };
+    if (!r.ok) throw new Error(`Backend returned ${r.status}`);
+    return { success: true, data: await r.json() };
+  } catch (err) {
+    // Endpoint may not be wired yet; treat as silent neutral fallback.
+    return { success: true, data: null, error: String(err.message || err) };
+  }
+}

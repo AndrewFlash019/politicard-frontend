@@ -11,6 +11,9 @@ import Waitlist from './pages/Waitlist';
 import LaunchChecklist from './pages/LaunchChecklist';
 import CookieConsent from './components/CookieConsent';
 import InstallPrompt from './components/InstallPrompt';
+import CompositePanel from './components/CompositePanel';
+import CollegialLayers from './components/CollegialLayers';
+import InputOutputLoop from './components/InputOutputLoop';
 import { analytics } from './lib/analytics';
 import FeedV1 from './feed/FeedV1';
 import Login from './Login';
@@ -9127,8 +9130,49 @@ function OfficialProfile({ official: o, onBack, likes, onLike, zip }) {
       {isLawEnforcement(o.title) && <MisconductCases officialId={o.id} county={o.county} />}
 
       <AccountabilityScorecardSection scorecard={scorecard} loading={scorecardLoading} officialId={o.id} />
+
+      {/* Structural framework (feature/structural-framework-core):
+          - Chief-executive offices get the composite roll-up panel.
+          - Collegial bodies (school board, city council, county
+            commission) get the three-layer labeled view INSTEAD of the
+            flat metrics list, so members read body-context vs personal
+            record separately.
+          - Mayors get the input-output loop with government_form
+            gating; council members render it in the council-member
+            treatment via the same component. */}
+      {(() => {
+        const t = (o.title || '').toLowerCase();
+        const isChiefExec = /\bmayor\b|\bgovernor\b|\bsuperintendent\b|attorney general|chief financial|commissioner of agriculture/.test(t)
+                            && !/lieutenant/.test(t);
+        const isCollegial = /school board|city council|town council|village council|county commission|board of county commissioners/.test(t);
+        const isMayor = /\bmayor\b/.test(t) && !/lieutenant/.test(t);
+        return (
+          <>
+            {isChiefExec && <CompositePanel officialId={o.id} />}
+            {isCollegial ? (
+              <CollegialLayers
+                metrics={scorecard && scorecard.metrics ? scorecard.metrics : []}
+                officialTitle={o.title}
+                county={o.county}
+                district={o.district}
+                includeDistrictLayer={false}
+              />
+            ) : (
+              <MetricsPills metrics={scorecard && scorecard.metrics ? scorecard.metrics : []} />
+            )}
+            {isMayor && (
+              <InputOutputLoop
+                metrics={scorecard && scorecard.metrics ? scorecard.metrics : []}
+                officialTitle={o.title}
+                city={(o.title || '').match(/mayor(?:[,\s]+(?:city|town|village)\s+of|\s+of)\s+(.+?)(?:,|$)/i)?.[1] || null}
+                county={o.county}
+              />
+            )}
+          </>
+        );
+      })()}
+
       <CostToTaxpayers official={o} />
-      <MetricsPills metrics={scorecard && scorecard.metrics ? scorecard.metrics : []} />
       <StalenessFooter official={o} />
 
       <div className="prof-tabs">
