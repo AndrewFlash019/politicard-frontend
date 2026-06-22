@@ -13,6 +13,7 @@ import CookieConsent from './components/CookieConsent';
 import InstallPrompt from './components/InstallPrompt';
 import FindingsPanel from './components/FindingsPanel';
 import CompositePanel from './components/CompositePanel';
+import JusticePipelinePanel from './components/JusticePipelinePanel';
 import CollegialLayers from './components/CollegialLayers';
 import InputOutputLoop from './components/InputOutputLoop';
 import { analytics } from './lib/analytics';
@@ -9138,6 +9139,21 @@ function OfficialProfile({ official: o, onBack, likes, onLike, zip }) {
           deliberately do not render "Clean" or "No findings" because
           absence in our sources is not exoneration (per spec). */}
       <FindingsPanel officialId={o.id} />
+
+      {/* Justice-pipeline composition (feature/disparity-layer):
+          Rendered only for offices that ACT at one of the pipeline
+          stages — sheriff, state attorney, judges. The panel shows
+          all stages with the populated stage(s) plus structural
+          placeholders for any awaiting-data stages, so a single
+          stage never appears in isolation. Other officials skip this
+          section. */}
+      {(() => {
+        const t = (o.title || '').toLowerCase();
+        const isPipelineOffice =
+          /\bsheriff\b|state attorney|\bjudge\b|public defender/.test(t);
+        if (!isPipelineOffice || !o.county) return null;
+        return <JusticePipelinePanel county={o.county} />;
+      })()}
 
       {/* Structural framework (feature/structural-framework-core):
           - Chief-executive offices get the composite roll-up panel.
