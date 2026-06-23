@@ -11,6 +11,7 @@ import Waitlist from './pages/Waitlist';
 import LaunchChecklist from './pages/LaunchChecklist';
 import CookieConsent from './components/CookieConsent';
 import InstallPrompt from './components/InstallPrompt';
+import FindingsPanel from './components/FindingsPanel';
 import CompositePanel from './components/CompositePanel';
 import CollegialLayers from './components/CollegialLayers';
 import InputOutputLoop from './components/InputOutputLoop';
@@ -9130,6 +9131,13 @@ function OfficialProfile({ official: o, onBack, likes, onLike, zip }) {
       {isLawEnforcement(o.title) && <MisconductCases officialId={o.id} county={o.county} />}
 
       <AccountabilityScorecardSection scorecard={scorecard} loading={scorecardLoading} officialId={o.id} />
+
+      {/* feature/findings-layer — unified findings (audit_findings +
+          county_cafr_audits cross-attribution + document_findings).
+          The component HIDES itself entirely when count=0; we
+          deliberately do not render "Clean" or "No findings" because
+          absence in our sources is not exoneration (per spec). */}
+      <FindingsPanel officialId={o.id} />
 
       {/* Structural framework (feature/structural-framework-core):
           - Chief-executive offices get the composite roll-up panel.

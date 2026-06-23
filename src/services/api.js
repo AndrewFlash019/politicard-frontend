@@ -940,3 +940,21 @@ export async function fetchMunicipalityForm(city, county) {
     return { success: true, data: null, error: String(err.message || err) };
   }
 }
+
+// Unified findings layer (audit_findings + county_cafr_audits +
+// document_findings). Returns null when the official has no findings —
+// the frontend hides the section entirely rather than rendering "clean,"
+// because absence here is not exoneration.
+export async function fetchOfficialFindings(officialId) {
+  if (officialId == null) return { success: true, data: null };
+  try {
+    const r = await apiFetch(`${BASE_URL}/api/v1/officials/${officialId}/findings`);
+    if (r.status === 404) return { success: true, data: null };
+    if (!r.ok) throw new Error(`Backend returned ${r.status}`);
+    const data = await r.json();
+    return { success: true, data };
+  } catch (err) {
+    console.error('PolitiCard findings error:', err);
+    return { success: false, data: null, error: String(err.message || err) };
+  }
+}
