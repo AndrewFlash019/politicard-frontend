@@ -966,6 +966,28 @@ export async function fetchCountyJusticePipeline(county) {
   }
 }
 
+// One district's full record — geometry, accountability chain,
+// demographics, statewide benchmark. Backend already wraps in
+// {success, data}; the helper unwraps to match the shape of the
+// other fetchers in this module.
+export async function fetchDistrict(planType, label) {
+  if (!planType || label == null) return { success: true, data: null };
+  try {
+    const path = `/api/v1/districts/${encodeURIComponent(planType)}/${encodeURIComponent(label)}`;
+    const r = await apiFetch(`${BASE_URL}${path}`);
+    if (r.status === 404) return { success: true, data: null };
+    if (!r.ok) throw new Error(`Backend returned ${r.status}`);
+    const body = await r.json();
+    if (body && typeof body === 'object' && 'success' in body && 'data' in body) {
+      return { success: body.success, data: body.data };
+    }
+    return { success: true, data: body };
+  } catch (err) {
+    console.error('PolitiCard district error:', err);
+    return { success: false, data: null, error: String(err.message || err) };
+  }
+}
+
 // Unified findings layer (audit_findings + county_cafr_audits +
 // document_findings). Returns null when the official has no findings —
 // the frontend hides the section entirely rather than rendering "clean,"
