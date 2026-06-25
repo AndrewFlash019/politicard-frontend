@@ -166,9 +166,12 @@ function geometryToSvg(geo) {
   const w = maxX - minX || 1;
   const h = maxY - minY || 1;
   const pad = Math.max(w, h) * 0.04;
+  // Translate (lng, lat) → SVG-local coords with origin at the bbox's
+  // NW corner. SVG y grows downward, so flip latitude (maxY → 0 top,
+  // minY → h bottom). preserveAspectRatio on the <svg> handles scaling.
   const project = (lng, lat) => ({
-    x: lng,
-    y: maxY - (lat - minY), // flip vertically
+    x: lng - minX,
+    y: maxY - lat,
   });
 
   const parts = rings.map((ring) => {
@@ -181,9 +184,9 @@ function geometryToSvg(geo) {
 
   return {
     d: parts,
-    viewBox: `${minX - pad} ${0 - pad} ${w + pad * 2} ${h + pad * 2}`,
-    x0: minX - pad,
-    y0: 0 - pad,
+    viewBox: `${-pad} ${-pad} ${w + pad * 2} ${h + pad * 2}`,
+    x0: -pad,
+    y0: -pad,
     w: w + pad * 2,
     h: h + pad * 2,
     stroke: Math.max(w, h) * 0.003,
