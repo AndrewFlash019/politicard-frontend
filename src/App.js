@@ -9158,9 +9158,9 @@ function OfficialProfile({ official: o, onBack, likes, onLike, zip }) {
         let planType = null;
         if (/u\.?s\.? (representative|congress(man|woman)?)|\bcongressman\b|\bcongresswoman\b/.test(t)) {
           planType = 'congressional';
-        } else if (/(florida|fl|state) senator|senate district/.test(t)) {
+        } else if (/(florida|fl|state) senator|senate district|\bsenator\b/.test(t)) {
           planType = 'state_senate';
-        } else if (/(florida|fl|state) representative|state house|house district/.test(t)) {
+        } else if (/(florida|fl|state) representative|state house|house district|\brepresentative\b/.test(t)) {
           planType = 'state_house';
         }
         if (!planType) return null;
