@@ -163,14 +163,19 @@ function geometryToSvg(geo) {
       if (pt[1] > maxY) maxY = pt[1];
     }
   }
-  const w = maxX - minX || 1;
+  // Equirectangular correction: a degree of longitude is cos(lat)
+  // shorter than a degree of latitude. Without this factor, FL districts
+  // (~29°N → cos ≈ 0.875) render ~13% wider than they are on the ground.
+  const midLatRad = ((minY + maxY) / 2) * Math.PI / 180;
+  const kx = Math.cos(midLatRad);
+  const w = (maxX - minX) * kx || 1;
   const h = maxY - minY || 1;
   const pad = Math.max(w, h) * 0.04;
   // Translate (lng, lat) → SVG-local coords with origin at the bbox's
   // NW corner. SVG y grows downward, so flip latitude (maxY → 0 top,
   // minY → h bottom). preserveAspectRatio on the <svg> handles scaling.
   const project = (lng, lat) => ({
-    x: lng - minX,
+    x: (lng - minX) * kx,
     y: maxY - lat,
   });
 
