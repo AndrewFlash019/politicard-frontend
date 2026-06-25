@@ -14,6 +14,7 @@ import InstallPrompt from './components/InstallPrompt';
 import FindingsPanel from './components/FindingsPanel';
 import CompositePanel from './components/CompositePanel';
 import JusticePipelinePanel from './components/JusticePipelinePanel';
+import DistrictMapPanel from './components/DistrictMapPanel';
 import CollegialLayers from './components/CollegialLayers';
 import InputOutputLoop from './components/InputOutputLoop';
 import { analytics } from './lib/analytics';
@@ -9139,6 +9140,36 @@ function OfficialProfile({ official: o, onBack, likes, onLike, zip }) {
           deliberately do not render "Clean" or "No findings" because
           absence in our sources is not exoneration (per spec). */}
       <FindingsPanel officialId={o.id} />
+
+      {/* District map (feature/redistricting):
+          Rendered for officials whose seat is a legislative district
+          with an ingested boundary (US Congress, FL Senate, FL House).
+          The panel shows the polygon, the demographics inside, and the
+          who-drew-it accountability chain. Other officials skip this
+          section; their seat-level district shapes are awaiting-data
+          this pass. The district number is parsed from o.title or
+          o.district; if neither has a numeric label, the panel is
+          omitted rather than rendered with a guess. */}
+      {(() => {
+        const t = (o.title || '').toLowerCase();
+        const districtRaw = String(o.district || '').trim();
+        // Pick the plan_type from the title; pull the numeric district
+        // label from o.district first (cleanest), else from the title.
+        let planType = null;
+        if (/u\.?s\.? (representative|congress(man|woman)?)|\bcongressman\b|\bcongresswoman\b/.test(t)) {
+          planType = 'congressional';
+        } else if (/(florida|fl|state) senator|senate district/.test(t)) {
+          planType = 'state_senate';
+        } else if (/(florida|fl|state) representative|state house|house district/.test(t)) {
+          planType = 'state_house';
+        }
+        if (!planType) return null;
+        const numFromDistrict = districtRaw.match(/\d+/)?.[0];
+        const numFromTitle = (o.title || '').match(/(?:District|Dist\.?)\s*#?\s*(\d+)/i)?.[1];
+        const label = numFromDistrict || numFromTitle;
+        if (!label) return null;
+        return <DistrictMapPanel planType={planType} label={label} />;
+      })()}
 
       {/* Justice-pipeline composition (feature/disparity-layer):
           Rendered only for offices that ACT at one of the pipeline
